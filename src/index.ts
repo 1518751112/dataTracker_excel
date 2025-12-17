@@ -8,6 +8,7 @@ import path from 'path'
 import {SERVER_PORT} from './config/env'
 import logger, {stream as loggerStream} from '@lib/logger'
 import {startTasks} from '@lib/tasks'
+import {BackendDataScalerService} from "@/services/backend.datascaler";
 
 const app = express()
 //监听线程异常
@@ -76,7 +77,7 @@ app.use('/api/bitable', bitableRouter)
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
-
+BackendDataScalerService.createInstance();
 const PORT = SERVER_PORT ? Number(SERVER_PORT) : 3001
 app.listen(PORT, () => {
   startTasks()

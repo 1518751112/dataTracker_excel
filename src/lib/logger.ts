@@ -1,5 +1,6 @@
 import winston from 'winston'
 import DailyRotateFile from 'winston-daily-rotate-file'
+import {LOG_LEVEL} from "@/config/env";
 
 winston.addColors({ error: 'bold red', warn: 'bold yellow', info: 'green', verbose: 'cyan', debug: 'blue', silly: 'grey' })
 const colorizer = winston.format.colorize()
@@ -14,13 +15,13 @@ const fileFmt = winston.format.combine(
 )
 
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: LOG_LEVEL,
   transports: [
     new winston.transports.Console({ format: consoleFmt }),
     new DailyRotateFile({ dirname: 'logs',
       filename: 'app-%DATE%.log',
       datePattern: 'YYYY-MM-DD',
-      zippedArchive: false,
+      zippedArchive: true,
       maxSize: '3m',
       maxFiles: '30d',
       format: fileFmt })

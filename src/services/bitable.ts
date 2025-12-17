@@ -1,6 +1,6 @@
-import { lark, withAuth } from './http'
-import { getAccessToken } from './larkAuth'
-import type { FieldSpec, SortOrder } from '../types/bitable'
+import {lark, withAuth} from './http'
+import {getAccessToken} from './larkAuth'
+import type {FieldSpec, SortOrder} from '../types/bitable'
 
 function auth(accessToken: string) {
   return withAuth(getAccessToken(accessToken))
@@ -12,7 +12,7 @@ export async function createApp(accessToken: string, name: string) {
 }
 
 export async function listTables(accessToken: string, appToken: string) {
-  const resp = await lark.get(`/bitable/v1/apps/${appToken}/tables`, auth(accessToken))
+  const resp = await lark.get(`/bitable/v1/apps/${appToken}/tables?page_size=100`, auth(accessToken))
   return resp.data.data?.items || []
 }
 
@@ -86,7 +86,7 @@ export async function setSortByFieldName(accessToken: string, appToken: string, 
 
 export async function insertRecords(accessToken: string, appToken: string, tableId: string, records: Record<string, any>[]) {
   const payload = { records: records.map(r => ({ fields: r })) }
-  const resp = await lark.post(`/bitable/v1/apps/${appToken}/tables/${tableId}/records`, payload, auth(accessToken))
+  const resp = await lark.post(`/bitable/v1/apps/${appToken}/tables/${tableId}/records/batch_create`, payload, auth(accessToken))
   return resp.data.data
 }
 
@@ -112,7 +112,7 @@ export async function searchRecordsByFieldValues(accessToken: string, appToken: 
 }
 
 export async function updateRecord(accessToken: string, appToken: string, tableId: string, recordId: string, fields: Record<string, any>) {
-  const resp = await lark.patch(`/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`, { fields }, auth(accessToken))
+  const resp = await lark.put(`/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`, { fields }, auth(accessToken))
   return resp.data.data
 }
 
