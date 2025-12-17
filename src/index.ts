@@ -1,17 +1,30 @@
 import express from 'express'
 import bodyParser from 'body-parser'
+import morgan from 'morgan'
 import authRouter from './routes/auth'
 import bitableRouter from './routes/bitable'
 import cors from 'cors'
 import path from 'path'
-import { SERVER_PORT } from './config/env'
-
+import {SERVER_PORT} from './config/env'
+import logger, {stream as loggerStream} from '@lib/logger'
+import {startTasks} from '@lib/tasks'
 
 const app = express()
+//监听线程异常
+process.on('uncaughtException', function(err) {
+  console.error('线程出现异常=>>', err);
+  logger.error('线程出现异常=>> ' + (err && err.stack ? err.stack : String(err)))
+});
+process.on('unhandledRejection', function(reason, promise) {
+  console.error('线程异常未处理=>>', reason);
+  console.error('注:该异常系统容易崩溃');
+});
+
 app.use(express.json({ limit: '2mb', type: ['application/json', 'application/*+json', '*/json'], verify: (req: any, _res, buf) => { req.rawBody = buf?.toString?.() } }))
 app.use(express.urlencoded({ extended: true }))
 app.use(bodyParser.json({ limit: '2mb' }))
 app.use(express.text({ type: 'text/*', limit: '2mb' }))
+app.use(morgan('combined', { stream: loggerStream }))
 // 统一错误处理（打印并返回JSON）
 app.use((err: any, req: any, res: any, next: any) => {
   const status = err?.status || err?.response?.status || 500
@@ -55,7 +68,7 @@ app.use((req, res, next) => {
 // 静态托管 client 前端
 const clientDir = path.join(process.cwd(), 'client')
 app.use(express.static(clientDir))
-console.log('静态目录:', clientDir);
+logger.info('静态目录: ' + clientDir)
 
 app.use('/api/auth', authRouter)
 app.use('/api/bitable', bitableRouter)
@@ -66,7 +79,7 @@ app.get('/api/health', (_req, res) => {
 
 const PORT = SERVER_PORT ? Number(SERVER_PORT) : 3001
 app.listen(PORT, () => {
-  console.log(`TS Server running at http://localhost:${PORT}`)
+  startTasks()
+  logger.info(`TS Server running at http://localhost:${PORT}`)
 })
-
 
