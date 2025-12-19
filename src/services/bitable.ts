@@ -6,8 +6,8 @@ function auth(accessToken: string) {
   return withAuth(getAccessToken(accessToken))
 }
 
-export async function createApp(accessToken: string, name: string) {
-  const resp = await lark.post('/bitable/v1/apps', { name }, auth(accessToken))
+export async function createApp(accessToken: string, name: string,folderToken?:string) {
+  const resp = await lark.post('/bitable/v1/apps', { name,folder_token: folderToken}, auth(accessToken))
   return resp.data.data.app
 }
 
@@ -87,6 +87,9 @@ export async function setSortByFieldName(accessToken: string, appToken: string, 
 export async function insertRecords(accessToken: string, appToken: string, tableId: string, records: Record<string, any>[]) {
   const payload = { records: records.map(r => ({ fields: r })) }
   const resp = await lark.post(`/bitable/v1/apps/${appToken}/tables/${tableId}/records/batch_create`, payload, auth(accessToken))
+  if(resp.data.code!=0){
+    throw new Error(`插入记录失败: ${resp.data.error.message || JSON.stringify(resp.data)}`)
+  }
   return resp.data.data
 }
 

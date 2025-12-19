@@ -1,9 +1,18 @@
 import logger from '@/lib/logger'
-import {LARK_APP_TOKEN, TASK_LIST_TABLE_NAME} from '@/config/env'
-import {createTable, findTableByName, insertRecords, listRecords, listTables, updateRecord} from '@/services/bitable'
+import {LARK_FOLDER_TOKEN, TASK_LIST_TABLE_NAME} from '@/config/env'
+import {
+    createApp,
+    createTable,
+    findTableByName,
+    insertRecords,
+    listRecords,
+    listTables,
+    updateRecord
+} from '@/services/bitable'
 import {BackendDataScalerService, IKeywordData} from '@/services/backend.datascaler'
 import {getTenantAccessToken} from '@/services/larkAuth'
 import dayjs from "dayjs";
+import {BitableType, readAllBitables, writeAllBitables} from "@lib/localData";
 
 function bucketName(asin: string, d = new Date()) {
     const day = d.getDate()
@@ -15,29 +24,29 @@ function getChildTableFields() {
     return [
         {field_name: '关联关键词', type: 'Text'},
         {field_name: '抓取时间', type: 'Text'},
-        {field_name: '流量占比', type: 'Number'},
+        {field_name: '流量占比', type: 'Text'},
         {field_name: '预估周曝光量', type: 'Number'},
         {field_name: '流量词类型', type: 'Text'},
-        {field_name: '自然流量占比', type: 'Number'},
-        {field_name: '广告流量占比', type: 'Number'},
+        {field_name: '自然流量占比', type: 'Text'},
+        {field_name: '广告流量占比', type: 'Text'},
         {field_name: '自然排名', type: 'Number'},
-        {field_name: '自然排名页码', type: 'Number'},
+        {field_name: '自然排名页码', type: 'Text'},
         {field_name: '更新时间', type: 'Text'},
-        {field_name: '广告排名', type: 'Number'},
-        {field_name: '广告排名页码', type: 'Number'},
+        {field_name: '广告排名', type: 'Text'},
+        {field_name: '广告排名页码', type: 'Text'},
         {field_name: 'ABA周排名', type: 'Number'},
         {field_name: '月搜索量', type: 'Number'},
         {field_name: 'SPR', type: 'Number'},
         {field_name: '标题密度', type: 'Number'},
         {field_name: '购买量', type: 'Number'},
-        {field_name: '购买率', type: 'Number'},
+        {field_name: '购买率', type: 'Text'},
         {field_name: '展示量', type: 'Number'},
         {field_name: '点击量', type: 'Number'},
         {field_name: '商品数', type: 'Number'},
         {field_name: '需供比', type: 'Number'},
         {field_name: '广告竞品数', type: 'Number'},
-        {field_name: '点击总占比', type: 'Number'},
-        {field_name: '转化总占比', type: 'Number'},
+        {field_name: '点击总占比', type: 'Text'},
+        {field_name: '转化总占比', type: 'Text'},
         {field_name: 'PPC价格', type: 'Number'},
         {field_name: '建议最低竞价', type: 'Number'},
         {field_name: '建议最高竞价', type: 'Number'},
@@ -63,7 +72,7 @@ function mapKeywordToRecord(k: IKeywordData) {
         '自然排名': k.rankPosition?.position ?? k.rankPosition?.index ?? null,
         '自然排名页码': k.rankPosition?`第${k.rankPosition.page}页 ${k.rankPosition.position}/${k.rankPosition.pageSize}`:null,
         '更新时间': k.rankPosition?.updatedTime?`中:${dayjs(k.rankPosition?.updatedTime).format('MM.DD HH:mm')}\n美:${dayjs(k.rankPosition?.updatedTime).add(8, 'hour').format('MM.DD HH:mm')}`:null,
-        '广告排名': k.adPosition?k.adPosition.position : "前3页无排名",
+        '广告排名': k.adPosition?k.adPosition.position.toString() : "前3页无排名",
         '广告排名页码': k.adPosition?`第${k.adPosition.page}页 ${k.adPosition.position}/${k.adPosition.pageSize}` : null,
         'ABA周排名': k.searchesRank ?? null,
         '月搜索量': k.searches ?? null,
@@ -87,17 +96,18 @@ function mapKeywordToRecord(k: IKeywordData) {
 export class TaskService {
     async run() {
         const accessToken = await getTenantAccessToken()
-        const appToken = LARK_APP_TOKEN
+        const {taskApp,logs} = await this.init();
+        const taskAppToken = taskApp?.app_token
+        const logAppToken = logs?.app_token
         const taskName = TASK_LIST_TABLE_NAME
-        if (!appToken || !taskName) {
-            logger.warn('[TASK] 跳过：缺少 BITABLE_APP_TOKEN 或 TASK_LIST_TABLE_NAME')
+        if (!taskAppToken || !logAppToken) {
+            logger.warn('[TASK] 跳过：缺少 logAppToken 或 taskAppToken')
             return
         }
-        const tables = await listTables(accessToken, appToken)
-        logger.info(`[TASK] 检测到 ${tables.length} 个数据表`)
-        let taskTable = await findTableByName(accessToken, appToken, taskName)
+        //--------获取任务----------
+        let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
         if (!taskTable) {
-            const created = await createTable(accessToken, appToken, taskName, [
+            const created = await createTable(accessToken, taskAppToken, taskName, [
                 {field_name: 'asin', type: 'Text'},
                 {field_name: '最近处理时间', type: 'Text'},
                 {field_name: '备注', type: 'Text'}
@@ -105,10 +115,11 @@ export class TaskService {
             taskTable = {table_id: created.table_id, name: taskName}
             logger.info('[TASK] 已创建任务列表数据表')
         }
-        const taskItems = await listRecords(accessToken, appToken, taskTable.table_id)
+        //----------处理任务-----------
+        const taskItems = await listRecords(accessToken, taskAppToken, taskTable.table_id)
         logger.info(`[TASK] 任务列表记录数：${taskItems.length}`)
         const todayKey = dayjs().format("YYYY-MM-DD")
-        const listTableInfo = await listTables(accessToken, appToken)
+        const listTableInfo = await listTables(accessToken, logAppToken)
         const startTask = taskItems.filter(it=>it.fields?.asin && (!it.fields["最近处理时间"]||dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD")!==todayKey))
         logger.info(`[TASK] 待处理任务数：${startTask.length}`)
         for (const it of startTask) {
@@ -119,7 +130,7 @@ export class TaskService {
             const childName = bucketName(asin)
             let child = listTableInfo.find((t: any) => t.name === childName) || null
             if (!child) {
-                const createdChild = await createTable(accessToken, appToken, childName, getChildTableFields() as any)
+                const createdChild = await createTable(accessToken, logAppToken, childName, getChildTableFields() as any)
                 child = {table_id: createdChild.table_id, name: childName}
                 logger.info(`[TASK] 已创建子表: ${childName}`)
             }
@@ -127,14 +138,14 @@ export class TaskService {
                 const resp = await this.getAllReverseLookupRecords(asin)
                 const dataArr = resp.map(mapKeywordToRecord)
                 if (dataArr.length > 0) {
-                    const r = await insertRecords(accessToken, appToken, child.table_id, dataArr)
+                    const r = await insertRecords(accessToken, logAppToken, child.table_id, dataArr)
                     logger.info(`[TASK] ${asin} 子表写入：${dataArr.length}`)
                 }
-                await updateRecord(accessToken, appToken, taskTable.table_id, it.record_id, {'最近处理时间':dayjs().format("YYYY-MM-DD HH:mm:ss")})
+                await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间':dayjs().format("YYYY-MM-DD HH:mm:ss")})
                 logger.info(`[TASK] 处理 ${asin} 完成`)
             } catch (e: any) {
                 console.log("e", e)
-                console.log("e", JSON.stringify(e.response.data, null, 2))
+                if(e.response?.data)console.log("e", JSON.stringify(e.response?.data, null, 2))
                 logger.error(`[TASK] 处理 ${asin} 失败：${e?.message || e}`)
             }
         }
@@ -166,5 +177,59 @@ export class TaskService {
     }
     return allRecords
   }
+
+    //初始化系统
+    async init(){
+        if(!LARK_FOLDER_TOKEN){
+            logger.error(`[TASK INIT] LARK_FOLDER_TOKEN 未配置，任务无法运行`);
+            return {}
+        }
+        return {
+            taskApp: await this.checkAndCreateDocs(BitableType.TASK,"追踪ASIN维护清单"),
+            logs: await this.checkAndCreateDocs(BitableType.LOG,`${dayjs().format("YYMM01")}_ASIN追踪记录`),
+        }
+    }
+    //检测飞书文档并创建
+    async checkAndCreateDocs(type:BitableType,name:string) {
+        //获取飞书文档列表
+        const list = readAllBitables()
+        const taskIndex = list.findIndex(it=>it.type==type&&it.status=='active');
+        let task = list[taskIndex]
+        const accessToken = await getTenantAccessToken()
+        let isNewTask = !task;
+
+        if(task){
+            //检测任务表是否存在
+            try {
+                const tables = await listTables(accessToken, task.app_token)
+                if(tables.length==0)isNewTask=true
+            }catch (e) {
+                logger.error(`[TASK INIT] 任务表应用检测失败: ${e}`);
+                isNewTask = true;
+            }
+        }
+        if(isNewTask){
+            logger.warn(`[TASK INIT] 未找到:${name},开始创建`);
+            try {
+                task = await createApp(accessToken,name,LARK_FOLDER_TOKEN)
+                task.type = type;
+                task.status = "active";
+                logger.info(`[TASK INIT] 任务表应用创建成功:${name}`);
+                if(taskIndex!=-1){
+                    list.splice(taskIndex,1)
+                }
+                list.filter(v=>v.type==type).forEach(v=>{
+                    v.status = "inactive"
+                })
+                list.push(task)
+                writeAllBitables(list)
+            }catch (e) {
+                logger.error(`[TASK INIT] 任务表创建失败: ${e}`);
+                return;
+            }
+        }
+
+        return task;
+    }
 }
 

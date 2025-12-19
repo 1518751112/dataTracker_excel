@@ -6,7 +6,8 @@ export const LARK_DOMAIN = process.env.LARK_DOMAIN || 'https://open.larksuite.co
 export const LARK_CLIENT_ID = process.env.LARK_CLIENT_ID || ''
 export const LARK_CLIENT_SECRET = process.env.LARK_CLIENT_SECRET || ''
 export const LARK_REDIRECT_URI = process.env.LARK_REDIRECT_URI || ''
-export const LARK_APP_TOKEN = process.env.LARK_APP_TOKEN
+//文件夹id
+export const LARK_FOLDER_TOKEN = process.env.LARK_FOLDER_TOKEN
 export const TASK_LIST_TABLE_NAME = process.env.TASK_LIST_TABLE_NAME
 
 export const SERVER_PORT = process.env.PORT ? Number(process.env.PORT) : 3001

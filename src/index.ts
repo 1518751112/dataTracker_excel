@@ -9,6 +9,7 @@ import {SERVER_PORT} from './config/env'
 import logger, {stream as loggerStream} from '@lib/logger'
 import {startTasks} from '@lib/tasks'
 import {BackendDataScalerService} from "@/services/backend.datascaler";
+import {TaskService} from "@lib/tasks/task.server";
 
 const app = express()
 //监听线程异常
@@ -19,6 +20,18 @@ process.on('uncaughtException', function(err) {
 process.on('unhandledRejection', function(reason, promise) {
   console.error('线程异常未处理=>>', reason);
   console.error('注:该异常系统容易崩溃');
+});
+
+process.on('SIGINT', () => {
+  console.log('进程退出中...请稍候，1');
+  logger.info('进程退出中...请稍候');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('进程退出中...请稍候,2');
+  logger.info('进程退出中...请稍候');
+  process.exit(0);
 });
 
 app.use(express.json({ limit: '2mb', type: ['application/json', 'application/*+json', '*/json'], verify: (req: any, _res, buf) => { req.rawBody = buf?.toString?.() } }))
@@ -82,5 +95,6 @@ const PORT = SERVER_PORT ? Number(SERVER_PORT) : 3001
 app.listen(PORT, () => {
   startTasks()
   logger.info(`TS Server running at http://localhost:${PORT}`)
+  new TaskService().run()
 })
 
