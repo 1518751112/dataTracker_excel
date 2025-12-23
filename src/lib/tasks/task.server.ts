@@ -3,6 +3,7 @@ import {LARK_FOLDER_TOKEN, TASK_LIST_TABLE_NAME} from '@/config/env'
 import {
     createApp,
     createTable,
+    ensureFields,
     findTableByName,
     insertRecords,
     listRecords,
@@ -22,8 +23,8 @@ function bucketName(asin: string, d = new Date()) {
 
 function getChildTableFields() {
     return [
+        {field_name: '日期', type: 'DateTime'},
         {field_name: '关联关键词', type: 'Text'},
-        {field_name: '抓取时间', type: 'Text'},
         {field_name: '流量占比', type: 'Text'},
         {field_name: '预估周曝光量', type: 'Number'},
         {field_name: '流量词类型', type: 'Text'},
@@ -60,10 +61,10 @@ function toPercentage(value: number | null | undefined) {
 }
 
 function mapKeywordToRecord(k: IKeywordData) {
-    const nowTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+    const nowTime = dayjs().valueOf();
     return {
         '关联关键词': k.keywords,
-        '抓取时间': nowTime,
+        '日期': nowTime,
         '流量占比': toPercentage(k.trafficPercentage),
         '预估周曝光量': k.calculatedWeeklySearches ?? null,
         '流量词类型': k.position ?? null,
@@ -133,7 +134,11 @@ export class TaskService {
                 const createdChild = await createTable(accessToken, logAppToken, childName, getChildTableFields() as any)
                 child = {table_id: createdChild.table_id, name: childName}
                 logger.info(`[TASK] 已创建子表: ${childName}`)
+            }else{
+                //检测子表字段
+                await ensureFields(accessToken, logAppToken, child.table_id, getChildTableFields())
             }
+
             try {
                 const resp = await this.getAllReverseLookupRecords(asin)
                 const dataArr = resp.map(mapKeywordToRecord)

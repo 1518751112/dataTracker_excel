@@ -1,10 +1,11 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import logger from './logger'
+import {DATA_DIR_NAME} from "@/config/env";
 
 // 数据文件存储路径
 const DATA_DIR = path.resolve(process.cwd(), 'data')
-const BITABLE_DATA_FILE = path.join(DATA_DIR, 'bitable.json')
+const BITABLE_DATA_FILE = path.join(DATA_DIR, `${DATA_DIR_NAME}.json`)
 
 export enum BitableType {
     TASK = 'task',

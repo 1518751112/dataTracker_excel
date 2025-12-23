@@ -13,5 +13,6 @@ export const TASK_LIST_TABLE_NAME = process.env.TASK_LIST_TABLE_NAME
 export const SERVER_PORT = process.env.PORT ? Number(process.env.PORT) : 3001
 export const LOG_LEVEL = process.env.LOG_LEVEL||'info'
 export const BACKEND_SERVER_URL = process.env.BACKEND_SERVER_URL
+export const DATA_DIR_NAME = process.env.DATA_DIR_NAME || 'bitable'
 
 

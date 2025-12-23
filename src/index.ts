@@ -9,7 +9,6 @@ import {SERVER_PORT} from './config/env'
 import logger, {stream as loggerStream} from '@lib/logger'
 import {startTasks} from '@lib/tasks'
 import {BackendDataScalerService} from "@/services/backend.datascaler";
-import {TaskService} from "@lib/tasks/task.server";
 
 const app = express()
 //监听线程异常
@@ -95,6 +94,6 @@ const PORT = SERVER_PORT ? Number(SERVER_PORT) : 3001
 app.listen(PORT, () => {
   startTasks()
   logger.info(`TS Server running at http://localhost:${PORT}`)
-  new TaskService().run()
+  // new TaskService().run()
 })
 

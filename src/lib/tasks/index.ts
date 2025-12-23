@@ -14,7 +14,7 @@ export function startTasks() {
     const m = process.memoryUsage()
     logger.info(`[TASK] memory rss=${(m.rss / 1024 / 1024).toFixed(2)}MB heapUsed=${(m.heapUsed / 1024 / 1024).toFixed(2)}MB`)
   }, { timezone: 'Asia/Shanghai' })
-  cron.schedule('1 0 * * *', async () => {
+  cron.schedule('*/1 * * * *', async () => {
     try {
       await taskService.run()
     }catch (e) {
