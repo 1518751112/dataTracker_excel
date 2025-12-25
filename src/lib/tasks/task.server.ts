@@ -154,6 +154,7 @@ export class TaskService {
                 logger.error(`[TASK] 处理 ${asin} 失败：${e?.message || e}`)
             }
         }
+        logger.info(`[TASK] 本轮任务处理完成:${startTask.length}`)
     }
 
     //获取全部反查记录

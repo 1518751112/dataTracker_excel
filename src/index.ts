@@ -1,8 +1,6 @@
 import express from 'express'
 import bodyParser from 'body-parser'
 import morgan from 'morgan'
-import authRouter from './routes/auth'
-import bitableRouter from './routes/bitable'
 import cors from 'cors'
 import path from 'path'
 import {SERVER_PORT} from './config/env'
@@ -83,8 +81,8 @@ const clientDir = path.join(process.cwd(), 'client')
 app.use(express.static(clientDir))
 logger.info('静态目录: ' + clientDir)
 
-app.use('/api/auth', authRouter)
-app.use('/api/bitable', bitableRouter)
+// app.use('/api/auth', authRouter)
+// app.use('/api/bitable', bitableRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
