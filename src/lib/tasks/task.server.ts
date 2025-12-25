@@ -14,6 +14,7 @@ import {BackendDataScalerService, IKeywordData} from '@/services/backend.datasca
 import {getTenantAccessToken} from '@/services/larkAuth'
 import dayjs from "dayjs";
 import {BitableType, readAllBitables, writeAllBitables} from "@lib/localData";
+import {Scrapeapi} from "@/services/scrapeapi";
 
 function bucketName(asin: string, d = new Date()) {
     const day = d.getDate()
@@ -51,6 +52,16 @@ function getChildTableFields() {
         {field_name: 'PPC价格', type: 'Number'},
         {field_name: '建议最低竞价', type: 'Number'},
         {field_name: '建议最高竞价', type: 'Number'},
+    ]
+}
+
+function getChildTableFields2() {
+    return [
+        {field_name: '追踪日期', type: 'DateTime'},
+        {field_name: '关键词', type: 'Text'},
+        {field_name: 'ASIN', type: 'Text'},
+        {field_name: '邮编', type: 'Text'},
+        {field_name: '排名', type: 'Text'},
     ]
 }
 
@@ -94,10 +105,22 @@ function mapKeywordToRecord(k: IKeywordData) {
     }
 }
 
+function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string,rank?:number) {
+    const nowTime = dayjs().valueOf();
+    return {
+        '追踪日期': nowTime,
+        '关键词': keyword,
+        'ASIN': asin,
+        '邮编': zipcode,
+        '站点': site,
+        '排名': rank?.toString()||"无",
+    }
+}
+
 export class TaskService {
     async run() {
         const accessToken = await getTenantAccessToken()
-        const {taskApp,logs} = await this.init();
+        const {taskApp,logs} = await this.init('追踪ASIN维护清单',`${dayjs().format("YYMM01")}_ASIN追踪记录}`);
         const taskAppToken = taskApp?.app_token
         const logAppToken = logs?.app_token
         const taskName = TASK_LIST_TABLE_NAME
@@ -185,14 +208,14 @@ export class TaskService {
   }
 
     //初始化系统
-    async init(){
+    async init(taskName:string,logName:string) {
         if(!LARK_FOLDER_TOKEN){
             logger.error(`[TASK INIT] LARK_FOLDER_TOKEN 未配置，任务无法运行`);
             return {}
         }
         return {
-            taskApp: await this.checkAndCreateDocs(BitableType.TASK,"追踪ASIN维护清单"),
-            logs: await this.checkAndCreateDocs(BitableType.LOG,`${dayjs().format("YYMM01")}_ASIN追踪记录`),
+            taskApp: await this.checkAndCreateDocs(BitableType.TASK,taskName),
+            logs: await this.checkAndCreateDocs(BitableType.LOG,logName),
         }
     }
     //检测飞书文档并创建
@@ -237,5 +260,94 @@ export class TaskService {
 
         return task;
     }
+
+    //从scrapeapi获取相关数据任务
+    async run2(){
+        const accessToken = await getTenantAccessToken()
+        const {taskApp,logs} = await this.init('追踪ASIN与关键字维护清单','ASIN与关键字追踪记录');
+        const taskAppToken = taskApp?.app_token
+        const logAppToken = logs?.app_token
+        const taskName = "追踪ASIN清单"
+        if (!taskAppToken || !logAppToken) {
+            logger.warn('[TASK2] 跳过：缺少 logAppToken 或 taskAppToken')
+            return
+        }
+        //--------获取任务----------
+        let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
+        if (!taskTable) {
+            const created = await createTable(accessToken, taskAppToken, taskName, [
+                {field_name: '关键词', type: 'Text'},
+                {field_name: 'ASIN', type: 'Text'},
+                {field_name: '站点', type: 'SingleSelect'},
+                {field_name: '邮编', type: 'SingleSelect'},
+                {field_name: '最近处理时间', type: 'Text'},
+            ])
+            taskTable = {table_id: created.table_id, name: taskName}
+            logger.info('[TASK2] 已创建任务列表数据表')
+        }
+        //----------处理任务-----------
+        const taskItems = await listRecords(accessToken, taskAppToken, taskTable.table_id)
+        logger.info(`[TASK2] 任务列表记录数：${taskItems.length}`)
+        const todayKey = dayjs().format("YYYY-MM-DD")
+        const startTask = taskItems.filter(it=>it.fields?.ASIN && (!it.fields["最近处理时间"]||dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD")!==todayKey))
+        logger.info(`[TASK2] 待处理任务数：${startTask.length}`)
+        const listTableInfo = await listTables(accessToken, logAppToken)
+
+        let childName = dayjs().format("YYMM")+"_追踪结果"
+        let child = listTableInfo.find((t: any) => t.name === childName) || null
+        if (!child) {
+            const createdChild = await createTable(accessToken, logAppToken, childName, getChildTableFields2() as any)
+            child = {table_id: createdChild.table_id, name: childName}
+            logger.info(`[TASK] 已创建子表: ${childName}`)
+        }else{
+            //检测子表字段
+            await ensureFields(accessToken, logAppToken, child.table_id, getChildTableFields2())
+        }
+
+        for (const it of startTask) {
+            const asin = it.fields?.ASIN
+            const keyword = it.fields["关键词"];
+            const zipcode = it.fields["邮编"];
+            const site = it.fields["站点"];
+            if (!asin||!keyword||!zipcode) continue
+
+            try {
+                const resp = await this.getKeywordAsinRank(keyword,asin,site,zipcode)
+                if (resp) {
+                    const r = await insertRecords(accessToken, logAppToken, child.table_id, [resp])
+                    logger.info(`[TASK2] ${asin} 子表写入`)
+                }
+                await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间':dayjs().format("YYYY-MM-DD HH:mm:ss")})
+                logger.info(`[TASK2] 处理 ${asin} 完成`)
+            } catch (e: any) {
+                console.log("e", e)
+                if(e.response?.data)console.log("e", JSON.stringify(e.response?.data, null, 2))
+                logger.error(`[TASK2] 处理 ${asin} 失败：${e?.message || e}`)
+            }
+        }
+        logger.info(`[TASK2] 本轮任务处理完成:${startTask.length}`)
+    }
+
+    //查询关键字中的ASIN排名数据
+    private async getKeywordAsinRank(keyword: string,asin:string,site:string, zipcode: string) {
+        //默认只查询3页
+        const count = 3;
+        const instance = Scrapeapi.getInstance();
+        let foundRank: number | null = null;
+        for (let i = 0; i < count; i++) {
+            logger.info(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} ASIN:${asin} 页码:${i+1}`)
+            const resp = await instance.keywordSearchAsin(keyword,zipcode,i+1);
+            if(resp && resp.results && resp.results.length>0){
+                const temp = resp.results.find(r=>r.asin===asin);
+                if(temp){
+                    console.log("temp",temp)
+                    foundRank = temp?.nature_rank;
+                    break;
+                }
+            }
+        }
+        return keyListToRecord(keyword,asin,zipcode,site,foundRank)
+    }
+
 }
 

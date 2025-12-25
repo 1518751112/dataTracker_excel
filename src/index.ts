@@ -6,7 +6,8 @@ import path from 'path'
 import {SERVER_PORT} from './config/env'
 import logger, {stream as loggerStream} from '@lib/logger'
 import {startTasks} from '@lib/tasks'
-import {BackendDataScalerService} from "@/services/backend.datascaler";
+import {Scrapeapi} from "@/services/scrapeapi";
+import {TaskService} from "@lib/tasks/task.server";
 
 const app = express()
 //监听线程异常
@@ -87,11 +88,13 @@ logger.info('静态目录: ' + clientDir)
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
-BackendDataScalerService.createInstance();
+// BackendDataScalerService.createInstance();
+Scrapeapi.createInstance();
+
 const PORT = SERVER_PORT ? Number(SERVER_PORT) : 3001
 app.listen(PORT, () => {
   startTasks()
   logger.info(`TS Server running at http://localhost:${PORT}`)
-  // new TaskService().run()
+  new TaskService().run2()
 })
 
