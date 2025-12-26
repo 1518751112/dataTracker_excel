@@ -340,7 +340,7 @@ export class TaskService {
             if(resp && resp.results && resp.results.length>0){
                 const temp = resp.results.find(r=>r.asin===asin);
                 if(temp){
-                    console.log("temp",temp)
+                    logger.debug("temp",temp)
                     foundRank = temp?.nature_rank;
                     break;
                 }
