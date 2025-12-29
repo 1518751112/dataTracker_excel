@@ -12,6 +12,19 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
+# 导入环境变量
+ARG LARK_DOMAIN
+ARG LARK_CLIENT_ID
+ARG LARK_CLIENT_SECRET
+ARG LARK_REDIRECT_URI
+ARG LARK_FOLDER_TOKEN
+ARG DATA_DIR_NAME
+ARG TASK_LIST_TABLE_NAME
+ARG BACKEND_SERVER_URL
+ARG SCRAPEAPI_TOKEN
+ARG PORT
+ARG LOG_LEVEL
+
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
