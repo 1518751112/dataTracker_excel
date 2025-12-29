@@ -1,12 +1,66 @@
 import axios, {AxiosInstance} from "axios";
 import {SCRAPEAPI_TOKEN} from "@/config/env";
 
-interface ProductImage {
-    url: string;
-    scale: string;
+interface AiReviews {
+    items: unknown[];
 }
 
-interface ProductResult {
+interface ProductReview {
+    date: string;
+    country: string;
+    imgs: string[];
+    star: string;
+    reviewLink: string;
+    author: string;
+    videos: string[];
+    title: string;
+    authorId: string;
+    content: string;
+    purchased: boolean;
+    vineVoice: boolean;
+    authorLink: string;
+    attributes: unknown[];
+    helpful: string;
+    reviewId: string;
+}
+
+interface ProductDescriptionItem {
+    images: string[];
+}
+
+export interface ProductDetail {
+    aiReviews: AiReviews;
+    category_name: string;
+    color: string;
+    product_weight: string;
+    rating: string;
+    description: string;
+    product_dims: string;
+    merchant_id: string;
+    galleryThumbnails: string[];
+    title: string;
+    customerReviews: string;
+    category_id: string;
+    reviews: ProductReview[];
+    additional_details: boolean;
+    pkg_dims: string;
+    product_description: ProductDescriptionItem[];
+    brand: string;
+    image: string;
+    images: string[];
+    star: string;
+    coupon: string;
+    otherAsins: string[];
+    highResolutionImages: string[];
+    has_cart: boolean;
+    delivery?: {
+        deliveryTime:string
+        fastestDelivery:string
+    };
+    asin: string;
+}
+
+export interface ProductResult {
     nature_rank: number;
     sales: string;
     star: string;
@@ -22,7 +76,7 @@ interface ProductResult {
     badge?: string;
 }
 
-interface KeywordSearchResponse {
+export interface KeywordSearchResponse {
     keyword: string;
     nextPage: string;
     pageIndex: string;
@@ -66,6 +120,22 @@ export class Scrapeapi {
             throw new Error(`Scrapeapi keywordSearchAsin error: ${response.data}`);
         }
         return response.data.data.json[0].data as KeywordSearchResponse;
+    }
+
+    //根据asin获取商品详情
+    public async getProductByAsin(asin: string, zipcode: string): Promise<ProductDetail | null> {
+        const response = await this.axios.post(`/api/v1/scrape`, {
+            "url": `https://www.amazon.com/dp/${asin}`,
+            "format": "json",
+            "parserName": "amzProductDetail",
+            "bizContext": {
+                "zipcode": zipcode
+            }
+        });
+        if (response.data.code != 0) {
+            throw new Error(`Scrapeapi getProductByAsin error: ${response.data}`);
+        }
+        return response.data?.data?.json?.[0]?.data?.results?.[0] as ProductDetail || null;
     }
 
 }

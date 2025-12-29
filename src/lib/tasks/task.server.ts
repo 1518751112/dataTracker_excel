@@ -14,7 +14,7 @@ import {BackendDataScalerService, IKeywordData} from '@/services/backend.datasca
 import {getTenantAccessToken} from '@/services/larkAuth'
 import dayjs from "dayjs";
 import {BitableType, readAllBitables, writeAllBitables} from "@lib/localData";
-import {Scrapeapi} from "@/services/scrapeapi";
+import {ProductDetail, ProductResult, Scrapeapi} from "@/services/scrapeapi";
 
 function bucketName(asin: string, d = new Date()) {
     const day = d.getDate()
@@ -60,8 +60,13 @@ function getChildTableFields2() {
         {field_name: '追踪日期', type: 'DateTime'},
         {field_name: '关键词', type: 'Text'},
         {field_name: 'ASIN', type: 'Text'},
+        {field_name: '站点', type: 'Text'},
         {field_name: '邮编', type: 'Text'},
-        {field_name: '排名', type: 'Text'},
+        {field_name: '自然排名', type: 'Text'},
+        {field_name: '广告排名', type: 'Text'},
+        {field_name: '到货时间', type: 'Text'},
+        {field_name: '星级', type: 'Text'},
+        {field_name: '评论数', type: 'Text'},
     ]
 }
 
@@ -105,7 +110,7 @@ function mapKeywordToRecord(k: IKeywordData) {
     }
 }
 
-function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string,rank?:number) {
+function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string,found?:ProductResult,asinInfo?:ProductDetail) {
     const nowTime = dayjs().valueOf();
     return {
         '追踪日期': nowTime,
@@ -113,7 +118,10 @@ function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string
         'ASIN': asin,
         '邮编': zipcode,
         '站点': site,
-        '排名': rank?.toString()||"无",
+        '自然排名': found?.nature_rank?.toString()||"无",
+        '到货时间': asinInfo?.delivery?.deliveryTime,
+        '星级': (asinInfo?.star||found?.star)||null,
+        '评论数': (asinInfo?.rating||found?.rating)?.replace(/[^\d.]/g, '') || null,
     }
 }
 
@@ -303,7 +311,7 @@ export class TaskService {
             //检测子表字段
             await ensureFields(accessToken, logAppToken, child.table_id, getChildTableFields2())
         }
-
+        const asinInfoMap:Map<string, ProductDetail> = new Map()
         for (const it of startTask) {
             const asin = it.fields?.ASIN
             const keyword = it.fields["关键词"];
@@ -312,7 +320,7 @@ export class TaskService {
             if (!asin||!keyword||!zipcode) continue
 
             try {
-                const resp = await this.getKeywordAsinRank(keyword,asin,site,zipcode)
+                const resp = await this.getKeywordAsinRank(keyword,asin,site,zipcode,asinInfoMap)
                 if (resp) {
                     const r = await insertRecords(accessToken, logAppToken, child.table_id, [resp])
                     logger.info(`[TASK2] ${asin} 子表写入`)
@@ -329,11 +337,11 @@ export class TaskService {
     }
 
     //查询关键字中的ASIN排名数据
-    private async getKeywordAsinRank(keyword: string,asin:string,site:string, zipcode: string) {
+    private async getKeywordAsinRank(keyword: string,asin:string,site:string, zipcode: string,asinInfoMap:Map<string, ProductDetail>) {
         //默认只查询3页
         const count = 3;
         const instance = Scrapeapi.getInstance();
-        let foundRank: number | null = null;
+        let found: ProductResult | null = null;
         for (let i = 0; i < count; i++) {
             logger.info(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} ASIN:${asin} 页码:${i+1}`)
             const resp = await instance.keywordSearchAsin(keyword,zipcode,i+1);
@@ -341,12 +349,18 @@ export class TaskService {
                 const temp = resp.results.find(r=>r.asin===asin);
                 if(temp){
                     logger.debug("temp",temp)
-                    foundRank = temp?.nature_rank;
+                    found = temp;
                     break;
                 }
             }
         }
-        return keyListToRecord(keyword,asin,zipcode,site,foundRank)
+        const key = `${asin}_${zipcode}`;
+        let asinInfo = asinInfoMap.get(key);
+        if(!asinInfo){
+            asinInfo = await instance.getProductByAsin(asin, zipcode);
+            asinInfoMap.set(key,asinInfo)
+        }
+        return keyListToRecord(keyword,asin,zipcode,site,found,asinInfo)
     }
 
 }
