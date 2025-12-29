@@ -31,9 +31,5 @@
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.6.3"
-  },
-  "_moduleAliases": {
-    "@": "dist",
-    "@lib": "dist/lib"
   }
 }
