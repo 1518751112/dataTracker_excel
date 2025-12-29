@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env.*
+!.env.example
+
+# Test
+coverage
+.nyc_output
+
+# Docker (avoid recursive copy)
+Dockerfile*
+docker-compose*.yml
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Misc
+.eslintcache
+.cache
+tmp
+temp
