@@ -1,15 +1,19 @@
-if (process.env.NODE_ENV === 'production') {
-  require('module-alias/register')
-}
+import path, {join} from 'path'
 import express from 'express'
 import {middle} from "@lib/middle";
-import path from 'path'
 import {SERVER_PORT} from './config/env'
 import logger from '@lib/logger'
 import {startTasks} from '@lib/tasks'
 import {BackendDataScalerService} from "@/services/backend.datascaler";
 import fileRouter from "./routes/file";
 import {TaskService} from "@lib/tasks/task.server";
+
+//为了编译后能正确识别别名路径
+const moduleAlias = require('module-alias')
+moduleAlias.addAliases({
+  '@'  : __dirname,
+  '@lib': join(__dirname, 'lib'),
+})
 
 const app = express()
 //监听线程异常
