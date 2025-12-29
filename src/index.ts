@@ -1,3 +1,4 @@
+import 'module-alias/register'
 import express from 'express'
 import bodyParser from 'body-parser'
 import morgan from 'morgan'
@@ -7,14 +8,15 @@ import {SERVER_PORT} from './config/env'
 import logger, {stream as loggerStream} from '@lib/logger'
 import {startTasks} from '@lib/tasks'
 import {BackendDataScalerService} from "@/services/backend.datascaler";
+import fileRouter from "./routes/file";
 
 const app = express()
 //监听线程异常
-process.on('uncaughtException', function(err) {
+process.on('uncaughtException', function (err) {
   console.error('线程出现异常=>>', err);
   logger.error('线程出现异常=>> ' + (err && err.stack ? err.stack : String(err)))
 });
-process.on('unhandledRejection', function(reason, promise) {
+process.on('unhandledRejection', function (reason, promise) {
   console.error('线程异常未处理=>>', reason);
   console.error('注:该异常系统容易崩溃');
 });
@@ -47,7 +49,7 @@ app.use((err: any, req: any, res: any, next: any) => {
 
 app.use((req, _res, next) => {
   if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && typeof (req as any).body === 'string') {
-    try { (req as any).body = JSON.parse((req as any).body) } catch {}
+    try { (req as any).body = JSON.parse((req as any).body) } catch { }
   }
   next()
 })
@@ -57,7 +59,7 @@ app.use((req, _res, next) => {
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
     try {
       console.log(`[REQ] ${req.method} ${req.originalUrl} headers=${JSON.stringify(req.headers)} body=${JSON.stringify(req.body)}`)
-    } catch {}
+    } catch { }
   }
   next()
 })
@@ -68,7 +70,7 @@ app.use((req, res, next) => {
   res.json = (body: any) => {
     try {
       console.log(`[RESP] ${req.method} ${req.originalUrl} -> ${res.statusCode} ${JSON.stringify(body)}`)
-    } catch {}
+    } catch { }
     return originalJson(body)
   }
   res.on('finish', () => {
@@ -83,6 +85,8 @@ logger.info('静态目录: ' + clientDir)
 
 // app.use('/api/auth', authRouter)
 // app.use('/api/bitable', bitableRouter)
+app.use('/api/file', fileRouter)
+
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })

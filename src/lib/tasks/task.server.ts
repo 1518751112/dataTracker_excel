@@ -95,66 +95,74 @@ function mapKeywordToRecord(k: IKeywordData) {
 }
 
 export class TaskService {
+    //是否执行中
+    private running = false
     async run() {
-        const accessToken = await getTenantAccessToken()
-        const {taskApp,logs} = await this.init();
-        const taskAppToken = taskApp?.app_token
-        const logAppToken = logs?.app_token
-        const taskName = TASK_LIST_TABLE_NAME
-        if (!taskAppToken || !logAppToken) {
-            logger.warn('[TASK] 跳过：缺少 logAppToken 或 taskAppToken')
-            return
-        }
-        //--------获取任务----------
-        let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
-        if (!taskTable) {
-            const created = await createTable(accessToken, taskAppToken, taskName, [
-                {field_name: 'asin', type: 'Text'},
-                {field_name: '最近处理时间', type: 'Text'},
-                {field_name: '备注', type: 'Text'}
-            ])
-            taskTable = {table_id: created.table_id, name: taskName}
-            logger.info('[TASK] 已创建任务列表数据表')
-        }
-        //----------处理任务-----------
-        const taskItems = await listRecords(accessToken, taskAppToken, taskTable.table_id)
-        logger.info(`[TASK] 任务列表记录数：${taskItems.length}`)
-        const todayKey = dayjs().format("YYYY-MM-DD")
-        const listTableInfo = await listTables(accessToken, logAppToken)
-        const startTask = taskItems.filter(it=>it.fields?.asin && (!it.fields["最近处理时间"]||dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD")!==todayKey))
-        logger.info(`[TASK] 待处理任务数：${startTask.length}`)
-        for (const it of startTask) {
-            const asin = it.fields?.asin
-            const last = it.fields?.['最近处理时间'] as string | undefined
-            if (!asin) continue
-            if (last && String(last).startsWith(todayKey)) continue
-            const childName = bucketName(asin)
-            let child = listTableInfo.find((t: any) => t.name === childName) || null
-            if (!child) {
-                const createdChild = await createTable(accessToken, logAppToken, childName, getChildTableFields() as any)
-                child = {table_id: createdChild.table_id, name: childName}
-                logger.info(`[TASK] 已创建子表: ${childName}`)
-            }else{
-                //检测子表字段
-                await ensureFields(accessToken, logAppToken, child.table_id, getChildTableFields())
+        if(this.running)return;
+        this.running = true
+        try{
+            const accessToken = await getTenantAccessToken()
+            const {taskApp,logs} = await this.init();
+            const taskAppToken = taskApp?.app_token
+            const logAppToken = logs?.app_token
+            const taskName = TASK_LIST_TABLE_NAME
+            if (!taskAppToken || !logAppToken) {
+                logger.warn('[TASK] 跳过：缺少 logAppToken 或 taskAppToken')
+                return
             }
-
-            try {
-                const resp = await this.getAllReverseLookupRecords(asin)
-                const dataArr = resp.map(mapKeywordToRecord)
-                if (dataArr.length > 0) {
-                    const r = await insertRecords(accessToken, logAppToken, child.table_id, dataArr)
-                    logger.info(`[TASK] ${asin} 子表写入：${dataArr.length}`)
+            //--------获取任务----------
+            let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
+            if (!taskTable) {
+                const created = await createTable(accessToken, taskAppToken, taskName, [
+                    {field_name: 'asin', type: 'Text'},
+                    {field_name: '最近处理时间', type: 'Text'},
+                    {field_name: '备注', type: 'Text'}
+                ])
+                taskTable = {table_id: created.table_id, name: taskName}
+                logger.info('[TASK] 已创建任务列表数据表')
+            }
+            //----------处理任务-----------
+            const taskItems = await listRecords(accessToken, taskAppToken, taskTable.table_id)
+            logger.info(`[TASK] 任务列表记录数：${taskItems.length}`)
+            const todayKey = dayjs().format("YYYY-MM-DD")
+            const listTableInfo = await listTables(accessToken, logAppToken)
+            const startTask = taskItems.filter(it=>it.fields?.asin && (!it.fields["最近处理时间"]||dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD")!==todayKey))
+            logger.info(`[TASK] 待处理任务数：${startTask.length}`)
+            for (const it of startTask) {
+                const asin = it.fields?.asin
+                const last = it.fields?.['最近处理时间'] as string | undefined
+                if (!asin) continue
+                if (last && String(last).startsWith(todayKey)) continue
+                const childName = bucketName(asin)
+                let child = listTableInfo.find((t: any) => t.name === childName) || null
+                if (!child) {
+                    const createdChild = await createTable(accessToken, logAppToken, childName, getChildTableFields() as any)
+                    child = {table_id: createdChild.table_id, name: childName}
+                    logger.info(`[TASK] 已创建子表: ${childName}`)
+                }else{
+                    //检测子表字段
+                    await ensureFields(accessToken, logAppToken, child.table_id, getChildTableFields())
                 }
-                await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间':dayjs().format("YYYY-MM-DD HH:mm:ss")})
-                logger.info(`[TASK] 处理 ${asin} 完成`)
-            } catch (e: any) {
-                console.log("e", e)
-                if(e.response?.data)console.log("e", JSON.stringify(e.response?.data, null, 2))
-                logger.error(`[TASK] 处理 ${asin} 失败：${e?.message || e}`)
+
+                try {
+                    const resp = await this.getAllReverseLookupRecords(asin)
+                    const dataArr = resp.map(mapKeywordToRecord)
+                    if (dataArr.length > 0) {
+                        const r = await insertRecords(accessToken, logAppToken, child.table_id, dataArr)
+                        logger.info(`[TASK] ${asin} 子表写入：${dataArr.length}`)
+                    }
+                    await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间':dayjs().format("YYYY-MM-DD HH:mm:ss")})
+                    logger.info(`[TASK] 处理 ${asin} 完成`)
+                } catch (e: any) {
+                    console.log("e", e)
+                    if(e.response?.data)console.log("e", JSON.stringify(e.response?.data, null, 2))
+                    logger.error(`[TASK] 处理 ${asin} 失败：${e?.message || e}`)
+                }
             }
+            logger.info(`[TASK] 本轮任务处理完成:${startTask.length}`)
+        }finally {
+            this.running = false
         }
-        logger.info(`[TASK] 本轮任务处理完成:${startTask.length}`)
     }
 
     //获取全部反查记录

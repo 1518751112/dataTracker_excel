@@ -1,0 +1,11 @@
+services:
+  data_excel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    ports:
+      - '3008:3008'
