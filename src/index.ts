@@ -1,12 +1,4 @@
 import path, {join} from 'path'
-import express from 'express'
-import {middle} from "@lib/middle";
-import {SERVER_PORT} from './config/env'
-import logger from '@lib/logger'
-import {startTasks} from '@lib/tasks'
-import fileRouter from "./routes/file";
-import {TaskService} from "@lib/tasks/task.server";
-import {Scrapeapi} from "@/services/scrapeapi";
 //为了编译后能正确识别别名路径
 const moduleAlias = require('module-alias')
 moduleAlias.addAliases({
@@ -14,14 +6,22 @@ moduleAlias.addAliases({
   '@lib': join(__dirname, 'lib'),
 })
 
+import express from 'express'
+import {middle} from "@lib/middle";
+import {SERVER_PORT} from './config/env'
+import logger from '@lib/logger'
+import {startTasks} from '@lib/tasks'
+import {BackendDataScalerService} from "@/services/backend.datascaler";
+import fileRouter from "./routes/file";
+import {TaskService} from "@lib/tasks/task.server";
 
 const app = express()
 //监听线程异常
-process.on('uncaughtException', function(err) {
+process.on('uncaughtException', function (err) {
   console.error('线程出现异常=>>', err);
   logger.error('线程出现异常=>> ' + (err && err.stack ? err.stack : String(err)))
 });
-process.on('unhandledRejection', function(reason, promise) {
+process.on('unhandledRejection', function (reason, promise) {
   console.error('线程异常未处理=>>', reason);
   console.error('注:该异常系统容易崩溃');
 });

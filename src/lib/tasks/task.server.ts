@@ -26,7 +26,7 @@ function getChildTableFields() {
     return [
         {field_name: '日期', type: 'DateTime'},
         {field_name: '关联关键词', type: 'Text'},
-        {field_name: '流量占比', type: 'Text'},
+        {field_name: '流量占比', type: 'Number',property:{formatter: "0.00%"}},
         {field_name: '预估周曝光量', type: 'Number'},
         {field_name: '流量词类型', type: 'Text'},
         {field_name: '自然流量占比', type: 'Text'},
@@ -82,7 +82,7 @@ function mapKeywordToRecord(k: IKeywordData) {
     return {
         '关联关键词': k.keywords,
         '日期': nowTime,
-        '流量占比': toPercentage(k.trafficPercentage),
+        '流量占比': Number(((k.trafficPercentage||0)*100).toFixed(2)),
         '预估周曝光量': k.calculatedWeeklySearches ?? null,
         '流量词类型': k.position ?? null,
         '自然流量占比': toPercentage(k.naturalRatio ?? null),
@@ -215,7 +215,14 @@ export class TaskService {
       console.log("e", e)
         logger.error(`批量反查获取失败`)
     }
-    return allRecords
+    //过滤重复关键字数据
+    const uniqueMap = new Map<string, IKeywordData>()
+    for (const record of allRecords) {
+        if (!uniqueMap.has(record.keywords)) {
+            uniqueMap.set(record.keywords, record)
+        }
+    }
+    return  Array.from(uniqueMap.values())
   }
 
     //初始化系统
