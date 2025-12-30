@@ -1,4 +1,11 @@
 import path, {join} from 'path'
+//为了编译后能正确识别别名路径
+const moduleAlias = require('module-alias')
+moduleAlias.addAliases({
+  '@'  : __dirname,
+  '@lib': join(__dirname, 'lib'),
+})
+
 import express from 'express'
 import {middle} from "@lib/middle";
 import {SERVER_PORT} from './config/env'
@@ -7,12 +14,7 @@ import {startTasks} from '@lib/tasks'
 import {BackendDataScalerService} from "@/services/backend.datascaler";
 import fileRouter from "./routes/file";
 import {TaskService} from "@lib/tasks/task.server";
-//为了编译后能正确识别别名路径
-const moduleAlias = require('module-alias')
-moduleAlias.addAliases({
-  '@'  : __dirname,
-  '@lib': join(__dirname, 'lib'),
-})
+
 
 
 const app = express()
