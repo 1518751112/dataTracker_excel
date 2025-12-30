@@ -189,7 +189,14 @@ export class TaskService {
       console.log("e", e)
         logger.error(`批量反查获取失败`)
     }
-    return allRecords
+    //过滤重复关键字数据
+    const uniqueMap = new Map<string, IKeywordData>()
+    for (const record of allRecords) {
+        if (!uniqueMap.has(record.keywords)) {
+            uniqueMap.set(record.keywords, record)
+        }
+    }
+    return  Array.from(uniqueMap.values())
   }
 
     //初始化系统
