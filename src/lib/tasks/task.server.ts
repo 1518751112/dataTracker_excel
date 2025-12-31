@@ -17,7 +17,8 @@ import {BitableType, readAllBitables, writeAllBitables} from "@lib/localData";
 
 function bucketName(asin: string, d = new Date()) {
     const day = d.getDate()
-    const b = Math.ceil(day / 10).toString()
+    let b:string|number = Math.ceil(day / 10)
+    b = (b>3?3:b).toString()
     return `${dayjs(d).format("YYMM")}${b}_${asin}`
 }
 
