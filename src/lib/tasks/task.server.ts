@@ -119,7 +119,7 @@ function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string
         'ASIN': asin,
         '邮编': zipcode,
         '站点': site,
-        '自然排名': found?.nature_rank?.toString()||"无",
+        '自然排名': found?.nature_rank||null,
         '是否广告位': found?.sponsered=="1"?"是":'',
         '最快到货时间': asinInfo?.delivery?.fastestDelivery,
         '到货时间': asinInfo?.delivery?.deliveryTime,
@@ -282,7 +282,7 @@ export class TaskService {
     //从scrapeapi获取相关数据任务
     async run2(){
         const accessToken = await getTenantAccessToken()
-        const {taskApp,logs} = await this.init('追踪ASIN与关键字维护清单','ASIN与关键字追踪记录');
+        const {taskApp,logs} = await this.init('吸尘器客户追踪ASIN清单','吸尘器客户排名及发货时间监控结果(Demo)');
         const taskAppToken = taskApp?.app_token
         const logAppToken = logs?.app_token
         const taskName = "追踪ASIN清单"
@@ -358,7 +358,7 @@ export class TaskService {
             if(resp && resp.results && resp.results.length>0){
                 const temp = resp.results.find(r=>r.asin===asin);
                 if(temp){
-                    logger.debug("temp",temp)
+                    // logger.debug("temp",temp)
                     found = temp;
                     break;
                 }

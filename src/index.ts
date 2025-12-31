@@ -11,9 +11,9 @@ import {middle} from "@lib/middle";
 import {SERVER_PORT} from './config/env'
 import logger from '@lib/logger'
 import {startTasks} from '@lib/tasks'
-import {BackendDataScalerService} from "@/services/backend.datascaler";
 import fileRouter from "./routes/file";
 import {TaskService} from "@lib/tasks/task.server";
+import {Scrapeapi} from "@/services/scrapeapi";
 
 const app = express()
 //监听线程异常
