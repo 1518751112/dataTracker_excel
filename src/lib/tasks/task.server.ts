@@ -66,7 +66,7 @@ function mapKeywordToRecord(k: IKeywordData) {
     return {
         '关联关键词': k.keywords,
         '日期': nowTime,
-        '流量占比': Number(((k.trafficPercentage||0)*100).toFixed(2)),
+        '流量占比': Number(k.trafficPercentage||0),
         '预估周曝光量': k.calculatedWeeklySearches ?? null,
         '流量词类型': k.position ?? null,
         '自然流量占比': toPercentage(k.naturalRatio ?? null),
