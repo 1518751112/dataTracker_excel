@@ -120,7 +120,7 @@ function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string
         '邮编': zipcode,
         '站点': site,
         '自然排名': found?.nature_rank||null,
-        '是否广告位': found?.sponsered=="1"?"是":'',
+        '是否广告位': found?.sponsored=="1"?"是":'',
         '最快到货时间': asinInfo?.delivery?.fastestDelivery,
         '到货时间': asinInfo?.delivery?.deliveryTime,
         '星级': (asinInfo?.star||found?.star)||null,

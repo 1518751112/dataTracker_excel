@@ -70,7 +70,7 @@ export interface ProductResult {
     price: string;
     title: string;
     images: string[];
-    sponsered: string;
+    sponsored: string;
     asin: string;
     image: string;
     badge?: string;
