@@ -50,6 +50,10 @@ export interface ProductDetail {
     images: string[];
     star: string;
     coupon: string;
+    attributes?: {
+        key: string;
+        value: string;
+    }[];
     otherAsins: string[];
     highResolutionImages: string[];
     has_cart: boolean;

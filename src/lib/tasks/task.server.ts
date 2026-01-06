@@ -23,8 +23,8 @@ const ChildTableFieldsKey2 = {
     "ASIN": {type: "Text"},
     "站点": {type: "Text"},
     "邮编": {type: "Text"},
-    "自然排名": {type: "Text"},
-    "广告排名": {type: "Text"},
+    "自然排名": {type: "Number"},
+    "广告排名": {type: "Number"},
     "价格": {type: "Text"},
 
 }
@@ -154,8 +154,8 @@ function keyListToRecord(keyword: string, asin: string, zipcode: string, site: s
         'ASIN': asin,
         '邮编': zipcode,
         '站点': site,
-        '自然排名': found?.nature_rank || null,
-        '广告排名': found?.spRank?.toString() || null,
+        '自然排名': Number(found?.nature_rank || 0)||null,
+        '广告排名': Number(found?.spRank || 0)||null,
         '价格': found?.price || null,
     }
 }
@@ -163,6 +163,77 @@ function keyListToRecord(keyword: string, asin: string, zipcode: string, site: s
 //本品相关信息
 function thisProductToRecord(asin:string,zipcode: string, site: string, asinInfo: ProductDetail):ThisProductType {
     const nowTime = dayjs().valueOf();
+    const attributes = asinInfo?.attributes || []
+    const BSR = attributes.find(item => item.key.includes('Best'))?.value || null
+    let categoryParts = BSR?.split('#') || []
+
+    // 如果#分割只有一条数据（排除空首项情况），尝试使用)分割
+    const validHashParts = categoryParts.filter(p => p && p.trim().length > 0)
+    if (validHashParts.length <= 1 && BSR) {
+         // 尝试使用 Nr. 分割
+         const nrParts = BSR.split('Nr.')
+         const validNrParts = nrParts.filter(p => p && p.trim().length > 0)
+         if (validNrParts.length > 1) {
+             categoryParts = nrParts
+         } else {
+             const parenParts = BSR.split(')')
+             const validParenParts = parenParts.filter(p => p && p.trim().length > 0)
+             if (validParenParts.length > 1) {
+                 categoryParts = parenParts
+             }
+         }
+    }
+
+    let mainCatStr = ''
+    let subCat1Str = ''
+    let subCat2Str = ''
+
+    if (categoryParts.length > 0) {
+        // 如果第一个没有数据说明索引1为第1个数据，反之索引0是
+        const startIndex = (categoryParts[0] && categoryParts[0].trim()) ? 0 : 1
+        mainCatStr = categoryParts[startIndex]
+        subCat1Str = categoryParts[startIndex + 1]
+        subCat2Str = categoryParts[startIndex + 2]
+    }
+
+    const parseBSR = (str: string | undefined | null) => {
+        if (!str) return { name: null, rank: null }
+        str = str.trim()
+
+        // 预处理：去除非法起始字符
+        str = str.replace(/^[\(（]/, '').trim()
+        // 去除 Nr. 前缀 (不论是 split 剩下的还是原本就有的)
+        str = str.replace(/^Nr\.\s*/i, '').trim()
+
+        if(str.includes("(") && !str.includes(")")) str = str+")"
+
+        // 匹配 "数字 in 名称"
+        const rankMatch = str.match(/^([\d.,]+)\s+in\s+(.+)/)
+        if (rankMatch) {
+            let name = rankMatch[2]
+            name = name.replace(/\((See|Siehe) Top.*\)/i, '').trim()
+            return {
+                rank: rankMatch[1].replace(/[,.]/g, ''),
+                name: name
+            }
+        }
+        // 匹配 "See Top ... in 名称" 或其他情况
+        const inMatch = str.match(/\s+in\s+(.+)/)
+        if (inMatch) {
+             let name = inMatch[1]
+             name = name.replace(/\((See|Siehe) Top.*\)/i, '').trim()
+             return {
+                 rank: null,
+                 name: name
+             }
+        }
+        return { name: str, rank: null }
+    }
+
+    const mainCat = parseBSR(mainCatStr)
+    const subCat1 = parseBSR(subCat1Str)
+    const subCat2 = parseBSR(subCat2Str)
+
     return {
         '追踪日期': nowTime,
         'ASIN': asin,
@@ -172,13 +243,13 @@ function thisProductToRecord(asin:string,zipcode: string, site: string, asinInfo
         '最快到货时间': asinInfo?.delivery?.fastestDelivery,
         '星级': (asinInfo?.star) || null,
         '评论数': (asinInfo?.rating)?.replace(/[^\d.]/g, '') || null,
-        'BSR排名（全）': null,
-        "BSR大类名称":null,
-        "BSR大类排名": null,
-        "BSR小类（一）名称": null,
-        "BSR小类（一）排名": null,
-        "BSR小类（二）名称": null,
-        "BSR小类（二）排名": null,
+        'BSR排名（全）': BSR,
+        "BSR大类名称": mainCat.name,
+        "BSR大类排名": Number(mainCat.rank||0)||null,
+        "BSR小类（一）名称": subCat1.name,
+        "BSR小类（一）排名": Number(subCat1.rank||0)||null,
+        "BSR小类（二）名称": subCat2.name,
+        "BSR小类（二）排名": Number(subCat2.rank||0)||null,
     }
 }
 
@@ -382,11 +453,11 @@ export class TaskService {
                 const {keywordRank, thisProduct} = await this.getKeywordAsinRank(keyword, asin, sites, asinInfoMap, competitorsASINs)
                 if (keywordRank.length) {
                      await insertRecords(accessToken, logAppToken, child.table_id, keywordRank)
-                    logger.info(`[TASK2] ${keywordRank.map(v=>v.ASIN).join(',')} 子表写入`)
+                    logger.info(`[TASK2] 子表写入:${keywordRank.length}`)
                 }
                 if (thisProduct.length) {
                     await insertRecords(accessToken, logAppToken, thisProductTable.table_id, thisProduct)
-                    logger.info(`[TASK2] ${thisProduct.map(v=>v.ASIN).join(',')} BSR排名表写入`)
+                    logger.info(`[TASK2] ${thisProduct.map(v=>v.ASIN).join(',')} BSR排名表写入:${thisProduct.length}`)
                 }
                 await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间': dayjs().format("YYYY-MM-DD HH:mm:ss")})
                 logger.info(`[TASK2] 处理 ${asin} 完成`)
@@ -418,7 +489,7 @@ export class TaskService {
                 const keyword = keywords[j]
                 const founds: ProductResult[] = [];
                 for (let i = 0; i < count; i++) {
-                    logger.info(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} 本品ASIN:${asin} 邮编：${zipcode} 页码:${i + 1}`)
+                    // logger.info(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} 本品ASIN:${asin} 邮编：${zipcode} 页码:${i + 1}`)
                     const resp = await instance.keywordSearchAsin(keyword, zipcode, i + 1);
                     if (resp && resp.results && resp.results.length > 0) {
                         const temp = resp.results.find(r => asinList.includes(r.asin));
@@ -431,6 +502,7 @@ export class TaskService {
                         }
                     }
                 }
+                logger.debug(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} 本品ASIN:${asin} 邮编：${zipcode} 找到ASIN数:${founds.length}`)
                 records.push(...asinList.map(tempAsin => {
                     const found = founds.find(r => r.asin === tempAsin);
                     return keyListToRecord(keyword, tempAsin, zipcode, name, found)
