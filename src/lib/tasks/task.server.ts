@@ -15,6 +15,49 @@ import {getTenantAccessToken} from '@/services/larkAuth'
 import dayjs from "dayjs";
 import {BitableType, readAllBitables, writeAllBitables} from "@lib/localData";
 import {ProductDetail, ProductResult, Scrapeapi} from "@/services/scrapeapi";
+import {FieldSpec} from "@/types/bitable";
+
+const ChildTableFieldsKey2 = {
+    "追踪日期": {type: "DateTime"},
+    "关键词": {type: "Text"},
+    "ASIN": {type: "Text"},
+    "站点": {type: "Text"},
+    "邮编": {type: "Text"},
+    "自然排名": {type: "Text"},
+    "广告排名": {type: "Text"},
+    "价格": {type: "Text"},
+
+}
+type ChildTableFieldsKey2Type = Record<keyof typeof ChildTableFieldsKey2, any>
+
+const ThisProduct = {
+    "追踪日期": {type: "DateTime"},
+    "ASIN": {type: "Text"},
+    "站点": {type: "Text"},
+    "邮编": {type: "Text"},
+    "到货时间": {type: "Text"},
+    "最快到货时间": {type: "Text"},
+    "星级": {type: "Text"},
+    "评论数": {type: "Text"},
+    "BSR排名（全）": {type: "Text"},
+    "BSR大类名称": {type: "Text"},
+    "BSR大类排名": {type: "Text"},
+    "BSR小类（一）名称": {type: "Text"},
+    "BSR小类（一）排名": {type: "Text"},
+    "BSR小类（二）名称": {type: "Text"},
+    "BSR小类（二）排名": {type: "Text"},
+}
+type ThisProductType = Record<keyof typeof ThisProduct, any>
+//任务清单表
+const TaskTableFields2 = {
+    "本品ASIN": {type: "Text"},
+    "Category": {type: "SingleSelect"},
+    "追踪关键词": {type: "Text"},
+    "竞品ASIN": {type: "Text"},
+    "站点": {type: "MultiSelect"},
+    "最近处理时间": {type: "Text"},
+}
+type TaskTableFields2Type = Record<keyof typeof TaskTableFields2, any>
 
 function bucketName(asin: string, d = new Date()) {
     const day = d.getDate()
@@ -26,7 +69,7 @@ function getChildTableFields() {
     return [
         {field_name: '日期', type: 'DateTime'},
         {field_name: '关联关键词', type: 'Text'},
-        {field_name: '流量占比', type: 'Number',property:{formatter: "0.00%"}},
+        {field_name: '流量占比', type: 'Number', property: {formatter: "0.00%"}},
         {field_name: '预估周曝光量', type: 'Number'},
         {field_name: '流量词类型', type: 'Text'},
         {field_name: '自然流量占比', type: 'Text'},
@@ -56,19 +99,10 @@ function getChildTableFields() {
 }
 
 function getChildTableFields2() {
-    return [
-        {field_name: '追踪日期', type: 'DateTime'},
-        {field_name: '关键词', type: 'Text'},
-        {field_name: 'ASIN', type: 'Text'},
-        {field_name: '站点', type: 'Text'},
-        {field_name: '邮编', type: 'Text'},
-        {field_name: '自然排名', type: 'Text'},
-        {field_name: '是否广告位', type: 'Text'},
-        {field_name: '到货时间', type: 'Text'},
-        {field_name: '最快到货时间', type: 'Text'},
-        {field_name: '星级', type: 'Text'},
-        {field_name: '评论数', type: 'Text'},
-    ]
+
+    return Object.keys(ChildTableFieldsKey2).map(key => {
+        return {field_name: key, ...ChildTableFieldsKey2[key]}
+    }) as FieldSpec[]
 }
 
 //转为百分比同时加上%
@@ -82,16 +116,16 @@ function mapKeywordToRecord(k: IKeywordData) {
     return {
         '关联关键词': k.keywords,
         '日期': nowTime,
-        '流量占比': Number(((k.trafficPercentage||0)*100).toFixed(2)),
+        '流量占比': Number(((k.trafficPercentage || 0) * 100).toFixed(2)),
         '预估周曝光量': k.calculatedWeeklySearches ?? null,
         '流量词类型': k.position ?? null,
         '自然流量占比': toPercentage(k.naturalRatio ?? null),
         '广告流量占比': toPercentage(k.adRatio ?? null),
         '自然排名': k.rankPosition?.position ?? k.rankPosition?.index ?? null,
-        '自然排名页码': k.rankPosition?`第${k.rankPosition.page}页 ${k.rankPosition.position}/${k.rankPosition.pageSize}`:null,
-        '更新时间': k.rankPosition?.updatedTime?`中:${dayjs(k.rankPosition?.updatedTime).format('MM.DD HH:mm')}\n美:${dayjs(k.rankPosition?.updatedTime).add(8, 'hour').format('MM.DD HH:mm')}`:null,
-        '广告排名': k.adPosition?k.adPosition.position.toString() : "前3页无排名",
-        '广告排名页码': k.adPosition?`第${k.adPosition.page}页 ${k.adPosition.position}/${k.adPosition.pageSize}` : null,
+        '自然排名页码': k.rankPosition ? `第${k.rankPosition.page}页 ${k.rankPosition.position}/${k.rankPosition.pageSize}` : null,
+        '更新时间': k.rankPosition?.updatedTime ? `中:${dayjs(k.rankPosition?.updatedTime).format('MM.DD HH:mm')}\n美:${dayjs(k.rankPosition?.updatedTime).add(8, 'hour').format('MM.DD HH:mm')}` : null,
+        '广告排名': k.adPosition ? k.adPosition.position.toString() : "前3页无排名",
+        '广告排名页码': k.adPosition ? `第${k.adPosition.page}页 ${k.adPosition.position}/${k.adPosition.pageSize}` : null,
         'ABA周排名': k.searchesRank ?? null,
         '月搜索量': k.searches ?? null,
         'SPR': k.cprExact ?? null,
@@ -111,7 +145,8 @@ function mapKeywordToRecord(k: IKeywordData) {
     }
 }
 
-function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string,found?:ProductResult,asinInfo?:ProductDetail) {
+//关键字排名处理
+function keyListToRecord(keyword: string, asin: string, zipcode: string, site: string, found?: ProductResult): ChildTableFieldsKey2Type {
     const nowTime = dayjs().valueOf();
     return {
         '追踪日期': nowTime,
@@ -119,19 +154,38 @@ function keyListToRecord(keyword:string, asin:string, zipcode:string,site:string
         'ASIN': asin,
         '邮编': zipcode,
         '站点': site,
-        '自然排名': found?.nature_rank||null,
-        '是否广告位': found?.sponsored=="1"?"是":'',
-        '最快到货时间': asinInfo?.delivery?.fastestDelivery,
+        '自然排名': found?.nature_rank || null,
+        '广告排名': found?.spRank?.toString() || null,
+        '价格': found?.price || null,
+    }
+}
+
+//本品相关信息
+function thisProductToRecord(asin:string,zipcode: string, site: string, asinInfo: ProductDetail):ThisProductType {
+    const nowTime = dayjs().valueOf();
+    return {
+        '追踪日期': nowTime,
+        'ASIN': asin,
+        '站点': site,
+        '邮编': zipcode,
         '到货时间': asinInfo?.delivery?.deliveryTime,
-        '星级': (asinInfo?.star||found?.star)||null,
-        '评论数': (asinInfo?.rating||found?.rating)?.replace(/[^\d.]/g, '') || null,
+        '最快到货时间': asinInfo?.delivery?.fastestDelivery,
+        '星级': (asinInfo?.star) || null,
+        '评论数': (asinInfo?.rating)?.replace(/[^\d.]/g, '') || null,
+        'BSR排名（全）': null,
+        "BSR大类名称":null,
+        "BSR大类排名": null,
+        "BSR小类（一）名称": null,
+        "BSR小类（一）排名": null,
+        "BSR小类（二）名称": null,
+        "BSR小类（二）排名": null,
     }
 }
 
 export class TaskService {
     async run() {
         const accessToken = await getTenantAccessToken()
-        const {taskApp,logs} = await this.init('追踪ASIN维护清单',`${dayjs().format("YYMM01")}_ASIN追踪记录}`);
+        const {taskApp, logs} = await this.init('追踪ASIN维护清单', `${dayjs().format("YYMM01")}_ASIN追踪记录}`);
         const taskAppToken = taskApp?.app_token
         const logAppToken = logs?.app_token
         const taskName = TASK_LIST_TABLE_NAME
@@ -155,7 +209,7 @@ export class TaskService {
         logger.info(`[TASK] 任务列表记录数：${taskItems.length}`)
         const todayKey = dayjs().format("YYYY-MM-DD")
         const listTableInfo = await listTables(accessToken, logAppToken)
-        const startTask = taskItems.filter(it=>it.fields?.asin && (!it.fields["最近处理时间"]||dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD")!==todayKey))
+        const startTask = taskItems.filter(it => it.fields?.asin && (!it.fields["最近处理时间"] || dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD") !== todayKey))
         logger.info(`[TASK] 待处理任务数：${startTask.length}`)
         for (const it of startTask) {
             const asin = it.fields?.asin
@@ -168,7 +222,7 @@ export class TaskService {
                 const createdChild = await createTable(accessToken, logAppToken, childName, getChildTableFields() as any)
                 child = {table_id: createdChild.table_id, name: childName}
                 logger.info(`[TASK] 已创建子表: ${childName}`)
-            }else{
+            } else {
                 //检测子表字段
                 await ensureFields(accessToken, logAppToken, child.table_id, getChildTableFields())
             }
@@ -180,11 +234,11 @@ export class TaskService {
                     const r = await insertRecords(accessToken, logAppToken, child.table_id, dataArr)
                     logger.info(`[TASK] ${asin} 子表写入：${dataArr.length}`)
                 }
-                await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间':dayjs().format("YYYY-MM-DD HH:mm:ss")})
+                await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间': dayjs().format("YYYY-MM-DD HH:mm:ss")})
                 logger.info(`[TASK] 处理 ${asin} 完成`)
             } catch (e: any) {
                 console.log("e", e)
-                if(e.response?.data)console.log("e", JSON.stringify(e.response?.data, null, 2))
+                if (e.response?.data) console.log("e", JSON.stringify(e.response?.data, null, 2))
                 logger.error(`[TASK] 处理 ${asin} 失败：${e?.message || e}`)
             }
         }
@@ -192,85 +246,86 @@ export class TaskService {
     }
 
     //获取全部反查记录
-  private async getAllReverseLookupRecords(asin: string) {
-    const svc = BackendDataScalerService.getInstance()
-    const allRecords: IKeywordData[] = []
-    let pageNum = 1
-    const pageSize = 200
-    try {
-      while (true) {
-          logger.info(`[TASK] 反查关键词获取中，ASIN:${asin} 页码:${pageNum}`)
-        const resp = await svc.getAsinKeywords({asin, pageSize, pageNum})
-        if (resp?.data && resp.data.length > 0) {
-          allRecords.push(...resp.data)
-          if (resp.data.length < pageSize) {
-            break
-          }
-          pageNum++
-        } else {
-          break
+    private async getAllReverseLookupRecords(asin: string) {
+        const svc = BackendDataScalerService.getInstance()
+        const allRecords: IKeywordData[] = []
+        let pageNum = 1
+        const pageSize = 200
+        try {
+            while (true) {
+                logger.info(`[TASK] 反查关键词获取中，ASIN:${asin} 页码:${pageNum}`)
+                const resp = await svc.getAsinKeywords({asin, pageSize, pageNum})
+                if (resp?.data && resp.data.length > 0) {
+                    allRecords.push(...resp.data)
+                    if (resp.data.length < pageSize) {
+                        break
+                    }
+                    pageNum++
+                } else {
+                    break
+                }
+            }
+        } catch (e) {
+            console.log("e", e)
+            logger.error(`批量反查获取失败`)
         }
-      }
-    }catch (e) {
-      console.log("e", e)
-        logger.error(`批量反查获取失败`)
-    }
-    //过滤重复关键字数据
-    const uniqueMap = new Map<string, IKeywordData>()
-    for (const record of allRecords) {
-        if (!uniqueMap.has(record.keywords)) {
-            uniqueMap.set(record.keywords, record)
+        //过滤重复关键字数据
+        const uniqueMap = new Map<string, IKeywordData>()
+        for (const record of allRecords) {
+            if (!uniqueMap.has(record.keywords)) {
+                uniqueMap.set(record.keywords, record)
+            }
         }
+        return Array.from(uniqueMap.values())
     }
-    return  Array.from(uniqueMap.values())
-  }
 
     //初始化系统
-    async init(taskName:string,logName:string) {
-        if(!LARK_FOLDER_TOKEN){
+    async init(taskName: string, logName: string) {
+        if (!LARK_FOLDER_TOKEN) {
             logger.error(`[TASK INIT] LARK_FOLDER_TOKEN 未配置，任务无法运行`);
             return {}
         }
         return {
-            taskApp: await this.checkAndCreateDocs(BitableType.TASK,taskName),
-            logs: await this.checkAndCreateDocs(BitableType.LOG,logName),
+            taskApp: await this.checkAndCreateDocs(BitableType.TASK, taskName),
+            logs: await this.checkAndCreateDocs(BitableType.LOG, logName),
         }
     }
+
     //检测飞书文档并创建
-    async checkAndCreateDocs(type:BitableType,name:string) {
+    async checkAndCreateDocs(type: BitableType, name: string) {
         //获取飞书文档列表
         const list = readAllBitables()
-        const taskIndex = list.findIndex(it=>it.type==type&&it.status=='active');
+        const taskIndex = list.findIndex(it => it.type == type && it.status == 'active');
         let task = list[taskIndex]
         const accessToken = await getTenantAccessToken()
         let isNewTask = !task;
 
-        if(task){
+        if (task) {
             //检测任务表是否存在
             try {
                 const tables = await listTables(accessToken, task.app_token)
-                if(tables.length==0)isNewTask=true
-            }catch (e) {
+                if (tables.length == 0) isNewTask = true
+            } catch (e) {
                 logger.error(`[TASK INIT] 任务表应用检测失败: ${e}`);
                 isNewTask = true;
             }
         }
-        if(isNewTask){
+        if (isNewTask) {
             logger.warn(`[TASK INIT] 未找到:${name},开始创建`);
             try {
-                task = await createApp(accessToken,name,LARK_FOLDER_TOKEN)
+                task = await createApp(accessToken, name, LARK_FOLDER_TOKEN)
                 task.type = type;
                 task.status = "active";
                 logger.info(`[TASK INIT] 任务表应用创建成功:${name}`);
-                if(taskIndex!=-1){
-                    list.splice(taskIndex,1)
+                if (taskIndex != -1) {
+                    list.splice(taskIndex, 1)
                 }
-                list.filter(v=>v.type==type).forEach(v=>{
+                list.filter(v => v.type == type).forEach(v => {
                     v.status = "inactive"
                 })
                 list.push(task)
                 writeAllBitables(list)
-            }catch (e) {
+            } catch (e) {
                 logger.error(`[TASK INIT] 任务表创建失败: ${e}`);
                 return;
             }
@@ -280,9 +335,9 @@ export class TaskService {
     }
 
     //从scrapeapi获取相关数据任务
-    async run2(){
+    async run2() {
         const accessToken = await getTenantAccessToken()
-        const {taskApp,logs} = await this.init('吸尘器客户追踪ASIN清单','吸尘器客户排名及发货时间监控结果(Demo)');
+        const {taskApp, logs} = await this.init('吸尘器客户追踪ASIN清单', '吸尘器客户排名及发货时间监控结果(Demo)');
         const taskAppToken = taskApp?.app_token
         const logAppToken = logs?.app_token
         const taskName = "追踪ASIN清单"
@@ -293,53 +348,51 @@ export class TaskService {
         //--------获取任务----------
         let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
         if (!taskTable) {
-            const created = await createTable(accessToken, taskAppToken, taskName, [
-                {field_name: '关键词', type: 'Text'},
-                {field_name: 'ASIN', type: 'Text'},
-                {field_name: '站点', type: 'SingleSelect'},
-                {field_name: '邮编', type: 'SingleSelect'},
-                {field_name: '最近处理时间', type: 'Text'},
-            ])
+            const created = await createTable(accessToken, taskAppToken, taskName, Object.keys(TaskTableFields2).map(k => ({field_name: k, ...TaskTableFields2[k]})))
             taskTable = {table_id: created.table_id, name: taskName}
             logger.info('[TASK2] 已创建任务列表数据表')
         }
         //----------处理任务-----------
-        const taskItems = await listRecords(accessToken, taskAppToken, taskTable.table_id)
+        const taskItems = await listRecords<TaskTableFields2Type>(accessToken, taskAppToken, taskTable.table_id)
         logger.info(`[TASK2] 任务列表记录数：${taskItems.length}`)
         const todayKey = dayjs().format("YYYY-MM-DD")
-        const startTask = taskItems.filter(it=>it.fields?.ASIN && (!it.fields["最近处理时间"]||dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD")!==todayKey))
+        const startTask = taskItems.filter(it => it.fields["本品ASIN"] && (!it.fields["最近处理时间"] || dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD") !== todayKey))
         logger.info(`[TASK2] 待处理任务数：${startTask.length}`)
         const listTableInfo = await listTables(accessToken, logAppToken)
 
-        let childName = dayjs().format("YYMM")+"_追踪结果"
-        let child = listTableInfo.find((t: any) => t.name === childName) || null
-        if (!child) {
-            const createdChild = await createTable(accessToken, logAppToken, childName, getChildTableFields2() as any)
-            child = {table_id: createdChild.table_id, name: childName}
-            logger.info(`[TASK] 已创建子表: ${childName}`)
-        }else{
-            //检测子表字段
-            await ensureFields(accessToken, logAppToken, child.table_id, getChildTableFields2())
-        }
-        const asinInfoMap:Map<string, ProductDetail> = new Map()
+        const childName = dayjs().format("YYMM") + "_关键词排名"
+        const child = await this.ensureTable(accessToken, logAppToken, childName,listTableInfo, getChildTableFields2());
+        const thisProductTable = await findTableByName(accessToken, logAppToken, "发货时间及BSR排名")
+
+        const asinInfoMap: Map<string, ProductDetail> = new Map()
         for (const it of startTask) {
-            const asin = it.fields?.ASIN
-            const keyword = it.fields["关键词"];
-            const zipcode = it.fields["邮编"];
-            const site = it.fields["站点"];
-            if (!asin||!keyword||!zipcode) continue
+            const asin = it.fields["本品ASIN"] as string
+            const keyword = (it.fields["追踪关键词"]?.split("\n") || []) as string[];
+            const sites = (it.fields["站点"]?.map(v => {
+                const arr = v.split("-")
+                return {
+                    zipcode: arr[1],
+                    name: arr[0]
+                }
+            }) || []) as [];
+            const competitorsASINs = (it.fields["竞品ASIN"]?.split("\n") || []) as string[];
+            if (!asin || !keyword || !sites.length) continue
 
             try {
-                const resp = await this.getKeywordAsinRank(keyword,asin,site,zipcode,asinInfoMap)
-                if (resp) {
-                    const r = await insertRecords(accessToken, logAppToken, child.table_id, [resp])
-                    logger.info(`[TASK2] ${asin} 子表写入`)
+                const {keywordRank, thisProduct} = await this.getKeywordAsinRank(keyword, asin, sites, asinInfoMap, competitorsASINs)
+                if (keywordRank.length) {
+                     await insertRecords(accessToken, logAppToken, child.table_id, keywordRank)
+                    logger.info(`[TASK2] ${keywordRank.map(v=>v.ASIN).join(',')} 子表写入`)
                 }
-                await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间':dayjs().format("YYYY-MM-DD HH:mm:ss")})
+                if (thisProduct.length) {
+                    await insertRecords(accessToken, logAppToken, thisProductTable.table_id, thisProduct)
+                    logger.info(`[TASK2] ${thisProduct.map(v=>v.ASIN).join(',')} BSR排名表写入`)
+                }
+                await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间': dayjs().format("YYYY-MM-DD HH:mm:ss")})
                 logger.info(`[TASK2] 处理 ${asin} 完成`)
             } catch (e: any) {
                 console.log("e", e)
-                if(e.response?.data)console.log("e", JSON.stringify(e.response?.data, null, 2))
+                if (e.response?.data) console.log("e", JSON.stringify(e.response?.data, null, 2))
                 logger.error(`[TASK2] 处理 ${asin} 失败：${e?.message || e}`)
             }
         }
@@ -347,30 +400,74 @@ export class TaskService {
     }
 
     //查询关键字中的ASIN排名数据
-    private async getKeywordAsinRank(keyword: string,asin:string,site:string, zipcode: string,asinInfoMap:Map<string, ProductDetail>) {
+    private async getKeywordAsinRank(keywords: string[], asin: string, sites: {
+        zipcode: string,
+        name: string
+    }[], asinInfoMap: Map<string, ProductDetail>, CompetitorsASINs: string[]): Promise<{keywordRank:ChildTableFieldsKey2Type[], thisProduct:ThisProductType[]}> {
         //默认只查询3页
         const count = 3;
         const instance = Scrapeapi.getInstance();
-        let found: ProductResult | null = null;
-        for (let i = 0; i < count; i++) {
-            logger.info(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} ASIN:${asin} 页码:${i+1}`)
-            const resp = await instance.keywordSearchAsin(keyword,zipcode,i+1);
-            if(resp && resp.results && resp.results.length>0){
-                const temp = resp.results.find(r=>r.asin===asin);
-                if(temp){
-                    // logger.debug("temp",temp)
-                    found = temp;
-                    break;
+        const records: ChildTableFieldsKey2Type[] = [];
+        const asinList = [asin, ...CompetitorsASINs]
+        const thisProduct:ThisProductType[] = []
+        await Promise.all(sites.map(async site => {
+            //站点
+            const {zipcode, name} = site
+            for (let j = 0; j < keywords.length; j++) {
+                //关键字
+                const keyword = keywords[j]
+                const founds: ProductResult[] = [];
+                for (let i = 0; i < count; i++) {
+                    logger.info(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} 本品ASIN:${asin} 邮编：${zipcode} 页码:${i + 1}`)
+                    const resp = await instance.keywordSearchAsin(keyword, zipcode, i + 1);
+                    if (resp && resp.results && resp.results.length > 0) {
+                        const temp = resp.results.find(r => asinList.includes(r.asin));
+                        if (temp) {
+                            // logger.debug("temp",temp)
+                            founds.push(temp)
+                        }
+                        if (founds.length >= CompetitorsASINs.length + 1) {
+                            break;
+                        }
+                    }
                 }
+                records.push(...asinList.map(tempAsin => {
+                    const found = founds.find(r => r.asin === tempAsin);
+                    return keyListToRecord(keyword, tempAsin, zipcode, name, found)
+                }))
+
+
             }
+
+            //本品信息
+            const key = `${asin}_${zipcode}`;
+            let asinInfo = asinInfoMap.get(key);
+            if (!asinInfo) {
+                asinInfo = await instance.getProductByAsin(asin, zipcode);
+                asinInfoMap.set(key, asinInfo)
+            }
+            thisProduct.push(thisProductToRecord(asin,zipcode, name, asinInfo))
+        }))
+
+        return {
+            keywordRank: records,
+            thisProduct
         }
-        const key = `${asin}_${zipcode}`;
-        let asinInfo = asinInfoMap.get(key);
-        if(!asinInfo){
-            asinInfo = await instance.getProductByAsin(asin, zipcode);
-            asinInfoMap.set(key,asinInfo)
+
+    }
+
+    //查询或创建数据表
+    private async ensureTable(accessToken: string, logAppToken: string, tableName: string,listTableInfo:any[], fields: FieldSpec[]) {
+        let child = listTableInfo.find((t: any) => t.name === tableName) || null
+        if (!child) {
+            const createdChild = await createTable(accessToken, logAppToken, tableName, fields)
+            child = {table_id: createdChild.table_id, name: tableName}
+            logger.info(`[TASK] 已创建子表: ${tableName}`)
+        } else {
+            //检测子表字段
+            await ensureFields(accessToken, logAppToken, child.table_id, fields)
         }
-        return keyListToRecord(keyword,asin,zipcode,site,found,asinInfo)
+        return child
     }
 
 }

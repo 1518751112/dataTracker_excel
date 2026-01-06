@@ -5,6 +5,11 @@ import type {FieldSpec, SortOrder} from '../types/bitable'
 function auth(accessToken: string) {
   return withAuth(getAccessToken(accessToken))
 }
+export interface IListRecordsResponse<T=any> {
+    fields:T,
+    record_id:string,
+    id:string
+}
 
 export async function createApp(accessToken: string, name: string,folderToken?:string) {
   const resp = await lark.post('/bitable/v1/apps', { name,folder_token: folderToken}, auth(accessToken))
@@ -93,7 +98,7 @@ export async function insertRecords(accessToken: string, appToken: string, table
   return resp.data.data
 }
 
-export async function listRecords(accessToken: string, appToken: string, tableId: string, viewId?: string) {
+export async function listRecords<T=any>(accessToken: string, appToken: string, tableId: string, viewId?: string):Promise<IListRecordsResponse<T>[]> {
   const resp = await lark.get(`/bitable/v1/apps/${appToken}/tables/${tableId}/records${viewId ? `?view_id=${viewId}` : ''}`, auth(accessToken))
   return resp.data.data?.items || []
 }

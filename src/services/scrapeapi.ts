@@ -62,6 +62,7 @@ export interface ProductDetail {
 
 export interface ProductResult {
     nature_rank: number;
+    spRank?: number;
     sales: string;
     star: string;
     prime: string;
