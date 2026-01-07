@@ -160,79 +160,99 @@ function keyListToRecord(keyword: string, asin: string, zipcode: string, site: s
     }
 }
 
+//BSR分割逻辑
+function splitCategoryString(BSR: string | undefined | null): string[] {
+    if (!BSR) return [];
+    let categoryParts = BSR.split('#')
+
+    // Check effective parts
+    const validHashParts = categoryParts.filter(p => p && p.trim().length > 0)
+
+    // If # split failed (only 1 valid part)
+    if (validHashParts.length <= 1) {
+        // Try Nr. (German)
+        const nrParts = BSR.split('Nr.')
+        const validNrParts = nrParts.filter(p => p && p.trim().length > 0)
+        if (validNrParts.length > 1) return nrParts;
+
+        // Try n. (Italian) - strict "n. " to avoid splitting words ending in n.
+        const nDotParts = BSR.split(/n\.\s/i)
+        const validNDotParts = nDotParts.filter(p => p && p.trim().length > 0)
+        if (validNDotParts.length > 1) return nDotParts;
+
+        // Try nº / Nº (Spanish/Portuguese)
+        const noParts = BSR.split(/nº\s*/i)
+        const validNoParts = noParts.filter(p => p && p.trim().length > 0)
+        if (validNoParts.length > 1) return noParts;
+
+        // Fallback to )
+        const parenParts = BSR.split(')')
+        const validParenParts = parenParts.filter(p => p && p.trim().length > 0)
+        if (validParenParts.length > 1) return parenParts;
+    }
+
+    return categoryParts;
+}
+
+//BSR单项解析逻辑
+function parseCategoryString(str: string | undefined | null) {
+    if (!str) return { name: null, rank: null }
+    str = str.trim()
+
+    // Pre-processing
+    str = str.replace(/^[\(（]/, '').trim() // Remove leading parens
+    str = str.replace(/^(Nr\.|n\.|nº|Nº)\s*/i, '').trim() // Remove rank prefixes
+    str = str.replace(' ', '').replace(/^#/, '').trim() // Remove leading hash
+
+    if(str.includes("(") && !str.includes(")")) str = str+")"
+
+    // Japanese: Name - Rank位
+    const jpMatch = str.match(/(.+)\s+-\s+([\d,]+)位/)
+    if (jpMatch) {
+         let name = jpMatch[1].trim()
+         name = name.replace(/[\(（](See|Siehe|Ver|Visualizza|Conheça|売れ筋ランキングを見る|شاهد).*[\)）]/i, '').trim()
+         return {
+             rank: jpMatch[2].replace(/[,.]/g, ''),
+             name: name
+         }
+    }
+
+    // Standard: Rank in Name
+    // Added Arabic digit support in matching range
+    const stdMatch = str.match(/^([\d.,\u0660-\u0669\u066C]+)\s+(in|en|em|في)\s+(.+)/i)
+    if (stdMatch) {
+        let name = stdMatch[3]
+        name = name.replace(/[\(（](See|Siehe|Ver|Visualizza|Conheça|売れ筋ランキングを見る|شاهد).*[\)）]/i, '').trim()
+        let rankStr = stdMatch[1].replace(/[,.\u066C]/g, '') // Remove separators
+        // Convert Arabic digits
+        rankStr = rankStr.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+
+        return {
+            rank: rankStr,
+            name: name
+        }
+    }
+
+    // "See Top ... in Name" (Rank is null)
+    const inMatch = str.match(/\s+(in|en|em|في)\s+(.+)/i)
+    if (inMatch) {
+         let name = inMatch[2]
+         name = name.replace(/[\(（](See|Siehe|Ver|Visualizza|Conheça|売れ筋ランキングを見る|شاهد).*[\)）]/i, '').trim()
+         return {
+             rank: null,
+             name: name
+         }
+    }
+
+    return { name: str, rank: null }
+}
+
 //本品相关信息
 function thisProductToRecord(asin:string,zipcode: string, site: string, asinInfo: ProductDetail):ThisProductType {
     const nowTime = dayjs().valueOf();
     const attributes = asinInfo?.attributes || []
-    const BSR = attributes.find(item => item.key.includes('Best'))?.value || null
-    let categoryParts = BSR?.split('#') || []
-
-    // 如果#分割只有一条数据（排除空首项情况），尝试使用)分割
-    const validHashParts = categoryParts.filter(p => p && p.trim().length > 0)
-    if (validHashParts.length <= 1 && BSR) {
-         // 尝试使用 Nr. 分割
-         const nrParts = BSR.split('Nr.')
-         const validNrParts = nrParts.filter(p => p && p.trim().length > 0)
-         if (validNrParts.length > 1) {
-             categoryParts = nrParts
-         } else {
-             const parenParts = BSR.split(')')
-             const validParenParts = parenParts.filter(p => p && p.trim().length > 0)
-             if (validParenParts.length > 1) {
-                 categoryParts = parenParts
-             }
-         }
-    }
-
-    let mainCatStr = ''
-    let subCat1Str = ''
-    let subCat2Str = ''
-
-    if (categoryParts.length > 0) {
-        // 如果第一个没有数据说明索引1为第1个数据，反之索引0是
-        const startIndex = (categoryParts[0] && categoryParts[0].trim()) ? 0 : 1
-        mainCatStr = categoryParts[startIndex]
-        subCat1Str = categoryParts[startIndex + 1]
-        subCat2Str = categoryParts[startIndex + 2]
-    }
-
-    const parseBSR = (str: string | undefined | null) => {
-        if (!str) return { name: null, rank: null }
-        str = str.trim()
-
-        // 预处理：去除非法起始字符
-        str = str.replace(/^[\(（]/, '').trim()
-        // 去除 Nr. 前缀 (不论是 split 剩下的还是原本就有的)
-        str = str.replace(/^Nr\.\s*/i, '').trim()
-
-        if(str.includes("(") && !str.includes(")")) str = str+")"
-
-        // 匹配 "数字 in 名称"
-        const rankMatch = str.match(/^([\d.,]+)\s+in\s+(.+)/)
-        if (rankMatch) {
-            let name = rankMatch[2]
-            name = name.replace(/\((See|Siehe) Top.*\)/i, '').trim()
-            return {
-                rank: rankMatch[1].replace(/[,.]/g, ''),
-                name: name
-            }
-        }
-        // 匹配 "See Top ... in 名称" 或其他情况
-        const inMatch = str.match(/\s+in\s+(.+)/)
-        if (inMatch) {
-             let name = inMatch[1]
-             name = name.replace(/\((See|Siehe) Top.*\)/i, '').trim()
-             return {
-                 rank: null,
-                 name: name
-             }
-        }
-        return { name: str, rank: null }
-    }
-
-    const mainCat = parseBSR(mainCatStr)
-    const subCat1 = parseBSR(subCat1Str)
-    const subCat2 = parseBSR(subCat2Str)
+    const BSR = attributes.find(item => ["meilleures ventes","Best","Amazon 売れ筋ランキング","Clasificación","الأفضل مبيعاً","Ranking dos mais vendidos"].find(key=>item.key.includes(key)))?.value || null
+    const {mainCat,subCat1,subCat2} = parseBSR(BSR)
 
     return {
         '追踪日期': nowTime,
@@ -250,6 +270,31 @@ function thisProductToRecord(asin:string,zipcode: string, site: string, asinInfo
         "BSR小类（一）排名": Number(subCat1.rank||0)||null,
         "BSR小类（二）名称": subCat2.name,
         "BSR小类（二）排名": Number(subCat2.rank||0)||null,
+    }
+}
+
+function parseBSR(BSR?:string){
+    const categoryParts = splitCategoryString(BSR)
+
+    let mainCatStr = ''
+    let subCat1Str = ''
+    let subCat2Str = ''
+
+    if (categoryParts.length > 0) {
+        // 如果第一个没有数据说明索引1为第1个数据，反之索引0是
+        const startIndex = (categoryParts[0] && categoryParts[0].trim()) ? 0 : 1
+        mainCatStr = categoryParts[startIndex]
+        subCat1Str = categoryParts[startIndex + 1]
+        subCat2Str = categoryParts[startIndex + 2]
+    }
+
+    const mainCat = parseCategoryString(mainCatStr)
+    const subCat1 = parseCategoryString(subCat1Str)
+    const subCat2 = parseCategoryString(subCat2Str)
+    return {
+        mainCat,
+        subCat1,
+        subCat2,
     }
 }
 
