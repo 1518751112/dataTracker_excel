@@ -21,6 +21,7 @@ const ChildTableFieldsKey2 = {
     "追踪日期": {type: "DateTime"},
     "关键词": {type: "Text"},
     "ASIN": {type: "Text"},
+    "ASIN名称": {type: "Text"},
     "站点": {type: "Text"},
     "邮编": {type: "Text"},
     "自然排名": {type: "Number"},
@@ -33,6 +34,7 @@ type ChildTableFieldsKey2Type = Record<keyof typeof ChildTableFieldsKey2, any>
 const ThisProduct = {
     "追踪日期": {type: "DateTime"},
     "ASIN": {type: "Text"},
+    "ASIN名称": {type: "Text"},
     "站点": {type: "Text"},
     "邮编": {type: "Text"},
     "到货时间": {type: "Text"},
@@ -151,6 +153,7 @@ function keyListToRecord(keyword: string, asin: string, zipcode: string, site: s
     return {
         '追踪日期': nowTime,
         '关键词': keyword,
+        'ASIN名称': found?.title || null,
         'ASIN': asin,
         '邮编': zipcode,
         '站点': site,
@@ -257,6 +260,7 @@ function thisProductToRecord(asin:string,zipcode: string, site: string, asinInfo
     return {
         '追踪日期': nowTime,
         'ASIN': asin,
+        'ASIN名称': asinInfo?.title || null,
         '站点': site,
         '邮编': zipcode,
         '到货时间': asinInfo?.delivery?.deliveryTime,
