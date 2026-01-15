@@ -16,6 +16,7 @@ import dayjs from "dayjs";
 import {BitableType, readAllBitables, writeAllBitables} from "@lib/localData";
 import {ProductDetail, ProductResult, Scrapeapi} from "@/services/scrapeapi";
 import {FieldSpec} from "@/types/bitable";
+import {TaskTool} from "@lib/tasks/task.tool";
 
 const ChildTableFieldsKey2 = {
     "追踪日期": {type: "DateTime"},
@@ -107,12 +108,6 @@ function getChildTableFields2() {
     }) as FieldSpec[]
 }
 
-//转为百分比同时加上%
-function toPercentage(value: number | null | undefined) {
-    if (value === null || value === undefined) return null
-    return (value * 100).toFixed(2) + '%'
-}
-
 function mapKeywordToRecord(k: IKeywordData) {
     const nowTime = dayjs().valueOf();
     return {
@@ -121,8 +116,8 @@ function mapKeywordToRecord(k: IKeywordData) {
         '流量占比': Number(((k.trafficPercentage || 0) * 100).toFixed(2)),
         '预估周曝光量': k.calculatedWeeklySearches ?? null,
         '流量词类型': k.position ?? null,
-        '自然流量占比': toPercentage(k.naturalRatio ?? null),
-        '广告流量占比': toPercentage(k.adRatio ?? null),
+        '自然流量占比': TaskTool.toPercentage(k.naturalRatio ?? null),
+        '广告流量占比': TaskTool.toPercentage(k.adRatio ?? null),
         '自然排名': k.rankPosition?.position ?? k.rankPosition?.index ?? null,
         '自然排名页码': k.rankPosition ? `第${k.rankPosition.page}页 ${k.rankPosition.position}/${k.rankPosition.pageSize}` : null,
         '更新时间': k.rankPosition?.updatedTime ? `中:${dayjs(k.rankPosition?.updatedTime).format('MM.DD HH:mm')}\n美:${dayjs(k.rankPosition?.updatedTime).add(8, 'hour').format('MM.DD HH:mm')}` : null,
@@ -133,14 +128,14 @@ function mapKeywordToRecord(k: IKeywordData) {
         'SPR': k.cprExact ?? null,
         '标题密度': k.titleDensityExact ?? null,
         '购买量': k.purchases ?? null,
-        '购买率': toPercentage(k.purchaseRate ?? null),
+        '购买率': TaskTool.toPercentage(k.purchaseRate ?? null),
         '展示量': k.impressions ?? null,
         '点击量': k.clicks ?? null,
         '商品数': k.products ?? null,
         '需供比': k.supplyDemandRatio ?? null,
         '广告竞品数': k.latest7daysAds ?? null,
-        '点击总占比': toPercentage(k.monopolyClickRate ?? null),
-        '转化总占比': toPercentage(k.top3ConversionRate ?? null),
+        '点击总占比': TaskTool.toPercentage(k.monopolyClickRate ?? null),
+        '转化总占比': TaskTool.toPercentage(k.top3ConversionRate ?? null),
         'PPC价格': k.exactPpc ?? null,
         '建议最低竞价': k.minExactPpc ?? null,
         '建议最高竞价': k.maxExactPpc ?? null,
@@ -406,52 +401,9 @@ export class TaskService {
             return {}
         }
         return {
-            taskApp: await this.checkAndCreateDocs(BitableType.TASK, taskName),
-            logs: await this.checkAndCreateDocs(BitableType.LOG, logName),
+            taskApp: await TaskTool.checkAndCreateDocs(BitableType.TASK, taskName),
+            logs: await TaskTool.checkAndCreateDocs(BitableType.LOG, logName),
         }
-    }
-
-    //检测飞书文档并创建
-    async checkAndCreateDocs(type: BitableType, name: string) {
-        //获取飞书文档列表
-        const list = readAllBitables()
-        const taskIndex = list.findIndex(it => it.type == type && it.status == 'active');
-        let task = list[taskIndex]
-        const accessToken = await getTenantAccessToken()
-        let isNewTask = !task;
-
-        if (task) {
-            //检测任务表是否存在
-            try {
-                const tables = await listTables(accessToken, task.app_token)
-                if (tables.length == 0) isNewTask = true
-            } catch (e) {
-                logger.error(`[TASK INIT] 任务表应用检测失败: ${e}`);
-                isNewTask = true;
-            }
-        }
-        if (isNewTask) {
-            logger.warn(`[TASK INIT] 未找到:${name},开始创建`);
-            try {
-                task = await createApp(accessToken, name, LARK_FOLDER_TOKEN)
-                task.type = type;
-                task.status = "active";
-                logger.info(`[TASK INIT] 任务表应用创建成功:${name}`);
-                if (taskIndex != -1) {
-                    list.splice(taskIndex, 1)
-                }
-                list.filter(v => v.type == type).forEach(v => {
-                    v.status = "inactive"
-                })
-                list.push(task)
-                writeAllBitables(list)
-            } catch (e) {
-                logger.error(`[TASK INIT] 任务表创建失败: ${e}`);
-                return;
-            }
-        }
-
-        return task;
     }
 
     //从scrapeapi获取相关数据任务
@@ -481,7 +433,7 @@ export class TaskService {
         const listTableInfo = await listTables(accessToken, logAppToken)
 
         const childName = dayjs().format("YYMM") + "_关键词排名"
-        const child = await this.ensureTable(accessToken, logAppToken, childName,listTableInfo, getChildTableFields2());
+        const child = await TaskTool.ensureTable(accessToken, logAppToken, childName,listTableInfo, getChildTableFields2());
         const thisProductTable = await findTableByName(accessToken, logAppToken, "发货时间及BSR排名")
 
         const asinInfoMap: Map<string, ProductDetail> = new Map()
@@ -575,20 +527,6 @@ export class TaskService {
             thisProduct
         }
 
-    }
-
-    //查询或创建数据表
-    private async ensureTable(accessToken: string, logAppToken: string, tableName: string,listTableInfo:any[], fields: FieldSpec[]) {
-        let child = listTableInfo.find((t: any) => t.name === tableName) || null
-        if (!child) {
-            const createdChild = await createTable(accessToken, logAppToken, tableName, fields)
-            child = {table_id: createdChild.table_id, name: tableName}
-            logger.info(`[TASK] 已创建子表: ${tableName}`)
-        } else {
-            //检测子表字段
-            await ensureFields(accessToken, logAppToken, child.table_id, fields)
-        }
-        return child
     }
 
 }
