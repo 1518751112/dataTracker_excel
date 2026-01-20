@@ -18,33 +18,49 @@ import {BestsellerProduct, ProductDetail, ProductResult, Scrapeapi} from "@/serv
 import {FieldSpec} from "@/types/bitable";
 import {TaskTool} from "@lib/tasks/task.tool";
 
+//追踪类目清单
 const CategoryListFieldsKey = {
+    "任务编号": {type: "AutoNumber"},
+    "追踪站点与邮编": {type: "MultiSelect"},
     "追踪类目链接": {type: "Text"},
     "最近处理时间": {type: "Text"},
 }
 type CategoryListFieldsKeyType = Record<keyof typeof CategoryListFieldsKey, any>
 
+//关键词追踪清单
 const ASINListFieldsKey = {
-    "本品ASIN": {type: "Text"},
-    "ASIN信息监控邮编": {type: "MultiSelect"},
+    "任务编号": {type: "AutoNumber"},
+    "站点与邮编": {type: "MultiSelect"},
     "追踪关键词": {type: "Text"},
+    "本品ASIN": {type: "Text"},
     "竞品ASIN": {type: "Text"},
     "最近处理时间": {type: "Text"},
 }
 type ASINListFieldsKeyType = Record<keyof typeof ASINListFieldsKey, any>
 
+//追踪ASIN清单
+const ASINListFieldsKey2 = {
+    "任务编号": {type: "AutoNumber"},
+    "追踪站点与邮编": {type: "MultiSelect"},
+    "追踪ASIN": {type: "Text"},
+    "最近处理时间": {type: "Text"},
+}
+type ASINListFieldsKey2Type = Record<keyof typeof ASINListFieldsKey2, any>
+
 const ThisProductRes = {
     "采集时间": {type: "DateTime"},
+    "站点与邮编": {type: "SingleSelect"},
     "ASIN": {type: "Text"},
     "ASIN标题": {type: "Text"},
     "星级": {type: "Text"},
-    "邮编": {type: "Text"},
+    "评论数量": {type: "Text"},
     "商品价格": {type: "Text"},
     "划线价格": {type: "Text"},
+    "是否有BuyBox": {type: "SingleSelect"},
+    "跟卖数量": {type: "Number"},
     "库存情况": {type: "Text"},
     "到货时间": {type: "Text"},
     "最快到货时间": {type: "Text"},
-    "评论数量": {type: "Text"}
 }
 type ThisProductResType = Record<keyof typeof ThisProductRes, any>
 
@@ -53,6 +69,7 @@ const BestsellerListRes = {
     "榜单名称": {type: "Text"},
     "ASIN": {type: "Text"},
     "ASIN标题": {type: "Text"},
+    "站点与邮编": {type: "SingleSelect"},
     "榜单排名": {type: "Number"},
     "商品价格": {type: "Text"},
     "星级": {type: "Text"},
@@ -70,8 +87,10 @@ type BestsellerListResType = Record<keyof typeof BestsellerListRes, any>
 const KeywordsListRes = {
     "采集时间": {type: "DateTime"},
     "关键词": {type: "Text"},
+    "站点与邮编": {type: "SingleSelect"},
     "ASIN": {type: "Text"},
     "ASIN标题": {type: "Text"},
+    "星级": {type: "Number"},
     "自然排名": {type: "Number"},
     "广告排名": {type: "Number"},
     "商品价格": {type: "Text"},
@@ -87,7 +106,7 @@ function getTableFields(obj: Record<string, any>) {
     }) as FieldSpec[]
 }
 
-function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail): BestsellerListResType {
+function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail,site?: {zipcode:string,name:string}): BestsellerListResType {
     const nowTime = dayjs().valueOf();
     const star = item.star?.match(/^[\d.]+/)?.[0] || null;
     const aiReviews = found?.aiReviewsSummary || found?.aiReviews;
@@ -119,8 +138,9 @@ function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail): Best
         "榜单名称": "amzBestSellers",
         "ASIN": item.asin,
         "ASIN标题": item.title,
+        "站点与邮编": `${site.name} - ${site.zipcode}`,
         "榜单排名": Number(item.rank),
-        "商品价格": found?.price,
+        "商品价格": item.price||found?.price,
         "星级": star?Number(star):null,
         "评论数量": found?.rating?.replace(/[^\d.]/g, '') || item.rating,
         "本次新增": null,
@@ -134,13 +154,16 @@ function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail): Best
 }
 
 //关键字排名处理
-function keyListToRecord(keyword: string, asin: string, found?: ProductResult): KeywordsListResType {
-    const nowTime = dayjs().valueOf();
+function keyListToRecord(keyword: string, asin: string, site: {zipcode:string,name:string}, found?: ProductResult,nowTime?:number): KeywordsListResType {
+    nowTime = nowTime||dayjs().valueOf();
+    const star = found?.star?.match(/^[\d.]+/)?.[0] || null;
     return {
         '采集时间': nowTime,
         '关键词': keyword,
         'ASIN标题': found?.title || null,
         'ASIN': asin,
+        "站点与邮编": `${site.name} - ${site.zipcode}`,
+        '星级': star?Number(star):null,
         '自然排名': Number(found?.nature_rank || 0)||null,
         '广告排名': Number(found?.spRank || 0)||null,
         '商品价格': found?.price || null,
@@ -148,21 +171,23 @@ function keyListToRecord(keyword: string, asin: string, found?: ProductResult): 
 }
 
 //本品相关信息
-function thisProductToRecord(asin:string,zipcode: string, asinInfo: ProductDetail):ThisProductResType {
-    const nowTime = dayjs().valueOf();
+function thisProductToRecord(asin:string,asinInfo: ProductDetail,site:{zipcode:string,name:string},followSeller:number,nowTime:number):ThisProductResType {
+    nowTime = nowTime||dayjs().valueOf();
 
     return {
         '采集时间': nowTime,
+        "站点与邮编": `${site.name} - ${site.zipcode}`,
         'ASIN': asin,
         'ASIN标题': asinInfo?.title || null,
-        '邮编': zipcode,
         '商品价格': asinInfo?.price || null,
         '划线价格': asinInfo?.strikethroughPrice?.value || null,
+        '是否有BuyBox': asinInfo?.has_cart?.toString(),
+        '跟卖数量': followSeller || null,
         '库存情况': asinInfo?.inStock || null,
         '到货时间': asinInfo?.delivery?.deliveryTime,
         '最快到货时间': asinInfo?.delivery?.fastestDelivery,
-        '星级': (asinInfo?.star) || null,
-        '评论数量': (asinInfo?.rating)?.replace(/[^\d.]/g, '') || null,
+        '星级': asinInfo?.star?Number((asinInfo?.star)): null,
+        '评论数量': asinInfo?.rating?Number((asinInfo?.rating)?.replace(/[^\d.]/g, '')) : null,
     }
 }
 
@@ -179,7 +204,7 @@ export class TaskTwoService {
         }
         //--------获取任务----------
         //asin清单
-        const taskName = "追踪ASIN清单"
+        const taskName = "关键词排名追踪清单"
         let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
         if (!taskTable) {
             const created = await createTable(accessToken, taskAppToken, taskName, getTableFields(ASINListFieldsKey))
@@ -195,26 +220,28 @@ export class TaskTwoService {
 
         const listTableInfo = await listTables(accessToken, logAppToken)
         const child = await TaskTool.ensureTable(accessToken, logAppToken, "关键词排名追踪",listTableInfo, getTableFields(KeywordsListRes));
-        const thisProductTable = await TaskTool.ensureTable(accessToken, logAppToken, "本品-竞品监控",listTableInfo, getTableFields(ThisProductRes));
+        // const thisProductTable = await TaskTool.ensureTable(accessToken, logAppToken, "本品监控",listTableInfo, getTableFields(ThisProductRes));
 
         const asinInfoMap: Map<string, ProductDetail> = new Map()
+        const nowTime = Date.now()
         for (const it of startTask) {
             const asins = (it.fields["本品ASIN"]?.split("\n") || []) as string[];
             const keyword = (it.fields["追踪关键词"]?.split("\n") || []) as string[];
-            const sites = (it.fields["ASIN信息监控邮编"] || []) as [];
+            const sites = (it.fields["站点与邮编"]?.map(v => {
+                const arr = v.split("-")
+                return {
+                    zipcode: arr[1],
+                    name: arr[0]
+                }
+            }) || []) as [];
             const competitorsASINs = (it.fields["竞品ASIN"]?.split("\n") || []) as string[];
             if (!asins.length || !keyword.length || !sites.length) continue
 
             try {
-                const {keywordRank, thisProduct} = await this.getKeywordAsinRank(keyword, asins, sites, asinInfoMap, competitorsASINs)
+                const {keywordRank} = await this.getKeywordAsinRank(keyword, asins, sites, asinInfoMap, competitorsASINs,nowTime)
                 if (keywordRank.length) {
                     await insertRecords(accessToken, logAppToken, child.table_id, keywordRank)
                     logger.info(`[TASK2] 子表写入:${keywordRank.length}`)
-                }
-                if (thisProduct.length) {
-                    console.log("thisProduct",thisProduct)
-                    await insertRecords(accessToken, logAppToken, thisProductTable.table_id, thisProduct)
-                    logger.info(`[TASK2] ${thisProduct.map(v=>v.ASIN).join(',')} BSR排名表写入:${thisProduct.length}`)
                 }
                 await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间': dayjs().format("YYYY-MM-DD HH:mm:ss")})
                 logger.info(`[TASK2] 处理 ${asins.join(',')} 完成`)
@@ -238,7 +265,7 @@ export class TaskTwoService {
         }
         //--------获取任务----------
         //asin清单
-        const taskName = "追踪类目清单"
+        const taskName = "榜单类目清单"
         let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
         if (!taskTable) {
             const created = await createTable(accessToken, taskAppToken, taskName, getTableFields(CategoryListFieldsKey))
@@ -255,27 +282,117 @@ export class TaskTwoService {
         const listTableInfo = await listTables(accessToken, logAppToken)
         const child = await TaskTool.ensureTable(accessToken, logAppToken, "热卖榜追踪",listTableInfo, getTableFields(BestsellerListRes));
 
-        const asinInfoMap: Map<string, ProductDetail> = new Map();
-
         for (let i = 0; i < startTask.length; i++) {
             const it = startTask[i]
             const categoryUrl = it.fields["追踪类目链接"]?.trim() || ""
+            const sites = (it.fields["追踪站点与邮编"]?.map(v => {
+                const arr = v.split("-")
+                return {
+                    zipcode: arr[1],
+                    name: arr[0]
+                }
+            }) || []) as [];
             if (!categoryUrl) continue
 
-            const sellersRank = await this.handleTopSellersRank(categoryUrl, asinInfoMap)
+            const sellersRank = await this.handleTopSellersRank(categoryUrl, sites)
             if (sellersRank.length) {
                 await insertRecords(accessToken, logAppToken, child.table_id, sellersRank)
                 logger.info(`[TASK 畅销榜排名] 子表写入:${sellersRank.length}`)
             }
 
             await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间': dayjs().format("YYYY-MM-DD HH:mm:ss")})
-            logger.info(`[TASK 畅销榜排名] 处理 ${i} 完成`)
+            logger.info(`[TASK 畅销榜排名] 处理索引 ${i} 完成`)
         }
 
     }
 
+    //asin清单详情任务
+    public async runAsinDetail() {
+        const accessToken = await getTenantAccessToken()
+        const {taskApp, logs} = await this.init('跑步机客户追踪清单', `跑步机客户数据汇总`);
+        const taskAppToken = taskApp?.app_token
+        const logAppToken = logs?.app_token
+        if (!taskAppToken || !logAppToken) {
+            logger.warn('[TASK asin清单详情] 跳过：缺少 logAppToken 或 taskAppToken')
+            return
+        }
+        //--------获取任务----------
+        //asin清单
+        const taskName = "追踪ASIN清单"
+        let taskTable = await findTableByName(accessToken, taskAppToken, taskName)
+        if (!taskTable) {
+            const created = await createTable(accessToken, taskAppToken, taskName, getTableFields(ASINListFieldsKey2))
+            taskTable = {table_id: created.table_id, name: taskName}
+            logger.info('[TASK] 已创建任务列表数据表')
+        }
+        //----------处理任务-----------
+        const taskItems = await listRecords<ASINListFieldsKey2Type>(accessToken, taskAppToken, taskTable.table_id)
+        logger.info(`[TASK asin清单详情] 任务列表记录数：${taskItems.length}`)
+        const todayKey = dayjs().format("YYYY-MM-DD")
+        const startTask = taskItems.filter(it => it.fields["追踪ASIN"] && (!it.fields["最近处理时间"] || dayjs(it.fields["最近处理时间"]).format("YYYY-MM-DD") !== todayKey))
+        logger.info(`[TASK asin清单详情] 待处理任务数：${startTask.length}`)
+
+        const listTableInfo = await listTables(accessToken, logAppToken)
+        const child = await TaskTool.ensureTable(accessToken, logAppToken, "ASIN追踪",listTableInfo, getTableFields(ThisProductRes));
+
+        const asinInfoMap: Map<string, ProductDetail> = new Map();
+        const asinFollowMap: Map<string, number> = new Map();
+        const nowTime = Date.now()
+        for (let i = 0; i < startTask.length; i++) {
+            const it = startTask[i]
+            const asins = (it.fields["追踪ASIN"]?.split("\n") || []) as string[];
+            const sites = (it.fields["追踪站点与邮编"]?.map(v => {
+                const arr = v.split("-")
+                return {
+                    zipcode: arr[1],
+                    name: arr[0]
+                }
+            }) || []) as [];
+            if (!asins.length || !sites.length) continue
+
+            const sellersRank = await this.handleAsinDetail(asins, sites,asinFollowMap,asinInfoMap,nowTime)
+            if (sellersRank.length) {
+                await insertRecords(accessToken, logAppToken, child.table_id, sellersRank)
+                logger.info(`[TASK asin清单详情] 子表写入:${sellersRank.length}`)
+            }
+
+            await updateRecord(accessToken, taskAppToken, taskTable.table_id, it.record_id, {'最近处理时间': dayjs().format("YYYY-MM-DD HH:mm:ss")})
+            logger.info(`[TASK asin清单详情] 处理索引 ${i} 完成`)
+        }
+    }
+
+    //处理ASIN清单详情
+    private async handleAsinDetail(asins: string[], sites: {zipcode:string,name:string}[],asinFollowMap:Map<string,number>, asinInfoMap: Map<string, ProductDetail>,nowTime:number) {
+        const instance = Scrapeapi.getInstance();
+        const thisProduct:ThisProductResType[] = []
+        logger.info(`[TASK asin清单详情] 开始获取详情:${asins.join(',')}`)
+        for (let i = 0; i < sites.length; i++) {
+            const zipcode = sites[i].zipcode
+
+            for (let j = 0; j <asins.length ; j++) {
+                const asin = asins[j]
+                const key = `${asin}_${zipcode}`;
+                let asinInfo = asinInfoMap.get(key);
+                if (!asinInfo) {
+                    asinInfo = await instance.getProductByAsin(asin, zipcode);
+                    asinInfoMap.set(key, asinInfo)
+                }
+                let followSeller = asinFollowMap.get(asin)
+                if(followSeller==null){
+                    followSeller = await instance.getFollowSeller(asin, zipcode);
+                    followSeller = followSeller||0;
+                    asinFollowMap.set(asin, followSeller)
+                }
+                thisProduct.push(thisProductToRecord(asin, asinInfo,sites[i],followSeller,nowTime))
+            }
+
+        }
+
+        return thisProduct
+    }
+
     //处理热卖榜链接处理
-    private async handleTopSellersRank(url:string,asinInfoMap: Map<string, ProductDetail>) {
+    private async handleTopSellersRank(url:string,sites:{zipcode:string,name:string}[]) {
         //通过url的域名确定邮编
         const urlObj = new URL(url)
         const instance = Scrapeapi.getInstance();
@@ -285,7 +402,7 @@ export class TaskTwoService {
             logger.warn(`[TASK 畅销榜排名] 未找到 ${urlObj.hostname} 对应的邮编`)
             return list
         }
-        const rankingData = await instance.getBestsellerRank(url, zipcode)
+        const rankingData = await instance.getFullBestsellerRank(url, zipcode)
         if (!rankingData) {
             logger.warn(`[TASK 畅销榜排名] 获取 ${url} 邮编 ${zipcode} 数据失败`)
             return list
@@ -295,15 +412,15 @@ export class TaskTwoService {
 
         for (let i = 0; i < rankingData.results.length; i++) {
             const item = rankingData.results[i]
-            const asin = item.asin
+            /*const asin = item.asin
             const key = `${asin}_${zipcode}`;
             let asinInfo = asinInfoMap.get(key);
             if (!asinInfo) {
-                logger.info(`[TASK 畅销榜排名] 未缓存 ${asin} 邮编 ${zipcode} 数据，开始获取`)
+                logger.debug(`[TASK 畅销榜排名] 未缓存 ${asin} 邮编 ${zipcode} 数据，开始获取`)
                 asinInfo = await instance.getProductByAsin(asin, zipcode);
                 asinInfoMap.set(key, asinInfo)
-            }
-            list.push(sellersRankToRecord(item, asinInfo))
+            }*/
+            list.push(sellersRankToRecord(item, null,sites[0]))
         }
 
         return list
@@ -322,16 +439,16 @@ export class TaskTwoService {
     }
 
     //查询关键字中的ASIN排名数据
-    private async getKeywordAsinRank(keywords: string[], asins: string[], sites: string[], asinInfoMap: Map<string, ProductDetail>, CompetitorsASINs: string[]): Promise<{keywordRank:KeywordsListResType[], thisProduct:ThisProductResType[]}> {
+    private async getKeywordAsinRank(keywords: string[], asins: string[], sites: {zipcode:string,name:string}[], asinInfoMap: Map<string, ProductDetail>, CompetitorsASINs: string[],nowTime:number): Promise<{keywordRank:KeywordsListResType[]}> {
         //默认只查询3页
         const count = 3;
         const instance = Scrapeapi.getInstance();
         const records: KeywordsListResType[] = [];
         const asinList = [...asins, ...CompetitorsASINs]
-        const thisProduct:ThisProductResType[] = []
+        // const thisProduct:ThisProductResType[] = []
         await Promise.all(sites.map(async site => {
             //站点
-            const zipcode = site
+            const zipcode = site.zipcode
             for (let j = 0; j < keywords.length; j++) {
                 //关键字
                 const keyword = keywords[j]
@@ -345,7 +462,7 @@ export class TaskTwoService {
                             // logger.debug("temp",temp)
                             founds.push(temp)
                         }
-                        if (founds.length >= CompetitorsASINs.length + 1) {
+                        if (founds.length >= asinList.length) {
                             break;
                         }
                     }
@@ -353,14 +470,14 @@ export class TaskTwoService {
                 logger.debug(`[TASK2] 关键字查询ASIN排名中，关键词:${keyword} 邮编：${zipcode} 找到ASIN数:${founds.length}`)
                 records.push(...asinList.map(tempAsin => {
                     const found = founds.find(r => r.asin === tempAsin);
-                    return keyListToRecord(keyword, tempAsin, found)
+                    return keyListToRecord(keyword, tempAsin,site, found,nowTime)
                 }))
 
 
             }
 
             //本品信息
-            for (let i = 0; i < asins.length; i++) {
+            /*for (let i = 0; i < asins.length; i++) {
                 const asin = asins[i]
                 const key = `${asin}_${zipcode}`;
                 let asinInfo = asinInfoMap.get(key);
@@ -369,13 +486,12 @@ export class TaskTwoService {
                     asinInfoMap.set(key, asinInfo)
                 }
                 thisProduct.push(thisProductToRecord(asin,zipcode, asinInfo))
-            }
+            }*/
 
         }))
 
         return {
             keywordRank: records,
-            thisProduct
         }
 
     }

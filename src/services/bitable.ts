@@ -200,6 +200,7 @@ const FIELD_TYPE_MAP: Record<string, number> = {
   DateTime: 5,
   Attachment: 15,
   User: 11,
+  AutoNumber: 1005,
 }
 
 function normalizeFieldSpec(spec: FieldSpec) {

@@ -1,4 +1,4 @@
-import axios, {AxiosInstance} from "axios";
+import axios, {AxiosInstance, AxiosRequestConfig} from "axios";
 import {SCRAPEAPI_TOKEN} from "@/config/env";
 
 interface AiReviews {
@@ -116,6 +116,13 @@ export interface BestsellerResponse {
     results: BestsellerProduct[];
     acpPath: string;
 }
+//继承AxiosRequestConfig类型
+export interface ScrapeapiRequestConfig extends AxiosRequestConfig {
+    // 重试次数
+    againNum?: number;
+    // 重试间隔时间(ms)
+    againInterval?: number;
+}
 
 export class Scrapeapi {
     private readonly axios:AxiosInstance;
@@ -155,15 +162,42 @@ export class Scrapeapi {
         return this.instance;
     }
 
+    public async sleep(ms: number) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+
+    private async post(url:string,data:any,config?: ScrapeapiRequestConfig){
+        const againNum = config?.againNum || 0;
+        const againInterval = config?.againInterval || 1000;
+        let num = 0;
+        while (againNum>num){
+            try {
+                const result = await this.axios.post(url,data,config)
+                return result;
+            }catch (e) {
+                num++;
+                if(num>=againNum){
+                    throw e;
+                }
+                console.log(`again num: ${num} Scrapeapi post error: ${e}`);
+                await this.sleep(againInterval);
+            }
+        }
+    }
+
     //关键字查询asin
     public async keywordSearchAsin(keyword:string,zipcode:string,page:number=1):Promise<KeywordSearchResponse>{
-        const response = await this.axios.post(`/api/v1/scrape`,{
+        const response = await this.post(`/api/v1/scrape`,{
             "url": `https://${this.getAmazonSiteByZipcode(zipcode)}/s?k=${keyword?.replace(/\s/g,'+')}&page=${page}`,
             "format": "json",
             "parserName": "amzKeyword",
             "bizContext": {
                 "zipcode": zipcode?.toString()
             }
+        },{
+            againNum: 3,
+            againInterval: 1000
         });
         if(response.data.code!=0){
             throw new Error(`Scrapeapi keywordSearchAsin error: ${response.data}`);
@@ -173,13 +207,16 @@ export class Scrapeapi {
 
     //根据asin获取商品详情
     public async getProductByAsin(asin: string, zipcode: string): Promise<ProductDetail | null> {
-        const response = await this.axios.post(`/api/v1/scrape`, {
+        const response = await this.post(`/api/v1/scrape`, {
             "url": `https://${this.getAmazonSiteByZipcode(zipcode)}/dp/${asin}`,
             "format": "json",
             "parserName": "amzProductDetail",
             "bizContext": {
                 "zipcode": zipcode
             }
+        },{
+            againNum: 3,
+            againInterval: 1000
         });
         if (response.data.code != 0) {
             throw new Error(`Scrapeapi getProductByAsin error: ${response.data}`);
@@ -188,19 +225,63 @@ export class Scrapeapi {
     }
 
     //获取畅销榜排名
-    public async getBestsellerRank(url: string, zipcode: string): Promise<BestsellerResponse | null> {
-        const response = await this.axios.post(`/api/v1/scrape`, {
+    public async getBestsellerRank(url: string, zipcode: string): Promise<BestsellerResponse[] | null> {
+        const response = await this.post(`/api/v1/scrape`, {
             "url": url,
             "format": "json",
             "parserName": "amzBestSellers",
             "bizContext": {
                 "zipcode": zipcode
             }
+        },{
+            againNum: 3,
+            againInterval: 1000
         });
         if (response.data.code != 0) {
             throw new Error(`Scrapeapi getBestsellerRank error: ${response.data}`);
         }
-        return response.data?.data?.json?.[0]?.data as BestsellerResponse || null;
+
+        return response.data?.data?.json?.map(v=>v.data) as BestsellerResponse[] || null;
+    }
+    //获取完整的排名 100名
+    public async getFullBestsellerRank(url: string, zipcode: string): Promise<BestsellerResponse | null> {
+        //分别是两页循环请求
+        const list:BestsellerResponse[] = [];
+        for (let i = 0; i < 2; i++) {
+            const newUrl = new URL(url);
+            newUrl.searchParams.set('pg', (i+1).toString());
+            const temp = await this.getBestsellerRank(newUrl.toString(), zipcode)
+            if(temp){
+                list.push(...temp);
+            }
+        }
+        let result = list[0];
+        list.forEach((item,i)=>{
+            if(i>0&&item){
+                result.results.push(...item.results);
+            }
+        })
+
+        return result
+    }
+
+    //获取跟卖数量
+    public async getFollowSeller(asin: string, zipcode: string):Promise<number|null>{
+        const response = await this.post(`/api/v1/scrape/follow-seller`, {
+            "url": "https://www.amazon.com",
+            "timeout": 60000,
+            "bizContext": {
+                "zipcode": zipcode,
+                "asin": asin
+            }
+        },{
+            againNum: 3,
+            againInterval: 1000
+        });
+        if (response.data.code != 0) {
+            throw new Error(`Scrapeapi getBestsellerRank error: ${response.data}`);
+        }
+        return response.data?.data?.json?.[0]?.data?.items?.length||null;
     }
 
     //根据邮编获取亚马逊站点地址
