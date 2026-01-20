@@ -40,7 +40,7 @@ type ASINListFieldsKeyType = Record<keyof typeof ASINListFieldsKey, any>
 
 //追踪ASIN清单
 const ASINListFieldsKey2 = {
-    "任务编号": {type: "AutoNumber"},
+    // "任务编号": {type: "AutoNumber"},
     "追踪站点与邮编": {type: "MultiSelect"},
     "追踪ASIN": {type: "Text"},
     "最近处理时间": {type: "Text"},

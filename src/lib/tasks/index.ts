@@ -44,6 +44,7 @@ export function startTasks() {
       result.forEach(it => {
         if (it.status == 'rejected') {
           logger.error(`[TASK] ${it.reason}`)
+          console.log("it.reason",it.reason)
         }
       })
     }catch (e) {
