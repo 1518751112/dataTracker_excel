@@ -11,6 +11,8 @@ export function startTasks() {
 
   const taskService = new TaskTwoService()
 
+
+
   /*cron.schedule('*!/1 * * * *', () => {
     const m = process.memoryUsage()
     logger.info(`[TASK] memory rss=${(m.rss / 1024 / 1024).toFixed(2)}MB heapUsed=${(m.heapUsed / 1024 / 1024).toFixed(2)}MB`)
@@ -31,5 +33,15 @@ export function startTasks() {
       logger.error(e);
     }
   }, { timezone: 'Asia/Shanghai' })
+
+  setTimeout(async ()=>{
+    try {
+      await taskService.runASINListTask();
+      await taskService.runTopSellersRankTask();
+      await taskService.runAsinDetail();
+    }catch (e) {
+
+    }
+  },1000)
   logger.info('[TASK] scheduler started')
 }

@@ -62,13 +62,6 @@ const PORT = SERVER_PORT ? Number(SERVER_PORT) : 3001
 app.listen(PORT, () => {
   startTasks()
   logger.info(`TS Server running at http://localhost:${PORT}`)
-  const taskService = new TaskTwoService()
-  Promise.all([
-      taskService.runASINListTask(),
-      taskService.runTopSellersRankTask(),
-      taskService.runAsinDetail(),
-  ]).catch((e) => {
-    logger.error(`TaskTwoService run error: ${e}`);
-  })
+
 })
 

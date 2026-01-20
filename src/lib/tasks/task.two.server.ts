@@ -13,7 +13,7 @@ import {
 import {BackendDataScalerService, IKeywordData} from '@/services/backend.datascaler'
 import {getTenantAccessToken} from '@/services/larkAuth'
 import dayjs from "dayjs";
-import {BitableType} from "@lib/localData";
+import {BitableData, BitableType} from "@lib/localData";
 import {BestsellerProduct, ProductDetail, ProductResult, Scrapeapi} from "@/services/scrapeapi";
 import {FieldSpec} from "@/types/bitable";
 import {TaskTool} from "@lib/tasks/task.tool";
@@ -210,11 +210,16 @@ function thisProductToRecord(asin:string,asinInfo: ProductDetail,site:{zipcode:s
     }
 }
 
+const seep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const listingsName = "数据追踪清单";
+const dataName = "数据追踪结果";
+
 export class TaskTwoService {
+    private isInit = false;
     //追踪ASIN清单任务
     async runASINListTask() {
         const accessToken = await getTenantAccessToken()
-        const {taskApp, logs} = await this.init('跑步机客户追踪清单', `跑步机客户数据汇总`);
+        const {taskApp, logs} = await this.init(listingsName, dataName);
         const taskAppToken = taskApp?.app_token
         const logAppToken = logs?.app_token
         if (!taskAppToken || !logAppToken) {
@@ -275,7 +280,7 @@ export class TaskTwoService {
     //畅销榜排名任务
     async runTopSellersRankTask() {
         const accessToken = await getTenantAccessToken()
-        const {taskApp, logs} = await this.init('跑步机客户追踪清单', `跑步机客户数据汇总`);
+        const {taskApp, logs} = await this.init(listingsName, dataName);
         const taskAppToken = taskApp?.app_token
         const logAppToken = logs?.app_token
         if (!taskAppToken || !logAppToken) {
@@ -325,10 +330,12 @@ export class TaskTwoService {
 
     }
 
+
+
     //asin清单详情任务
     public async runAsinDetail() {
         const accessToken = await getTenantAccessToken()
-        const {taskApp, logs} = await this.init('跑步机客户追踪清单', `跑步机客户数据汇总`);
+        const {taskApp, logs} = await this.init(listingsName, dataName);
         const taskAppToken = taskApp?.app_token
         const logAppToken = logs?.app_token
         if (!taskAppToken || !logAppToken) {
@@ -432,15 +439,22 @@ export class TaskTwoService {
     }
 
     //初始化系统
-    async init(taskName: string, logName: string) {
+    async init(taskName: string, logName: string): Promise<{taskApp?:BitableData,logs?:BitableData}> {
+        while (this.isInit){
+            await seep(1000)
+        }
+        this.isInit=true;
         if (!LARK_FOLDER_TOKEN) {
             logger.error(`[TASK INIT] LARK_FOLDER_TOKEN 未配置，任务无法运行`);
+            this.isInit = false;
             return {}
         }
-        return {
+        const result = {
             taskApp: await TaskTool.checkAndCreateDocs(BitableType.TASK, taskName),
-            logs: await TaskTool.checkAndCreateDocs(BitableType.LOG, logName),
+                logs: await TaskTool.checkAndCreateDocs(BitableType.LOG, logName),
         }
+        this.isInit = false;
+        return result;
     }
 
     //查询关键字中的ASIN排名数据
