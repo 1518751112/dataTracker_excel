@@ -40,7 +40,7 @@ export function startTasks() {
       await taskService.runTopSellersRankTask();
       await taskService.runAsinDetail();
     }catch (e) {
-
+      logger.error(`[TASK] runAsinDetail error: ${e}`);
     }
   },1000)
   logger.info('[TASK] scheduler started')
