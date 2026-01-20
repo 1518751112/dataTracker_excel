@@ -36,11 +36,18 @@ export function startTasks() {
 
   setTimeout(async ()=>{
     try {
-      await taskService.runASINListTask();
-      await taskService.runTopSellersRankTask();
-      await taskService.runAsinDetail();
+      const result = await Promise.allSettled([
+        taskService.runASINListTask(),
+        taskService.runAsinDetail(),
+        taskService.runTopSellersRankTask(),
+      ])
+      result.forEach(it => {
+        if (it.status == 'rejected') {
+          logger.error(`[TASK] ${it.reason}`)
+        }
+      })
     }catch (e) {
-      logger.error(`[TASK] runAsinDetail error: ${e}`);
+      logger.error(e);
     }
   },1000)
   logger.info('[TASK] scheduler started')

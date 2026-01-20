@@ -145,7 +145,7 @@ function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail,site?:
         "榜单名称": "amzBestSellers",
         "ASIN": item.asin,
         "ASIN标题": item.title,
-        "站点与邮编": `${site.name} - ${site.zipcode}`,
+        "站点与邮编": `${site?.name || ""} - ${site?.zipcode || ""}`,
         "榜单排名": Number(item.rank),
         "商品价格": item.price||found?.price,
         "星级": star?Number(star):null,
@@ -169,7 +169,7 @@ function keyListToRecord(keyword: string, asin: string, site: {zipcode:string,na
         '关键词': keyword,
         'ASIN标题': found?.title || null,
         'ASIN': asin,
-        "站点与邮编": `${site.name} - ${site.zipcode}`,
+        "站点与邮编": `${site?.name || ""} - ${site?.zipcode || ""}`,
         '星级': star?Number(star):null,
         '自然排名': Number(found?.nature_rank || 0)||null,
         '广告排名': Number(found?.spRank || 0)||null,
@@ -188,7 +188,7 @@ function thisProductToRecord(asin:string,asinInfo: ProductDetail,site:{zipcode:s
     }
     return {
         '采集时间': nowTime,
-        "站点与邮编": `${site.name} - ${site.zipcode}`,
+        "站点与邮编": `${site?.name || ""} - ${site?.zipcode || ""}`,
         'ASIN': asin,
         'ASIN标题': asinInfo?.title || null,
         '商品价格': asinInfo?.price || null,
