@@ -79,7 +79,7 @@ const BestsellerListRes = {
     "站点与邮编": {type: "SingleSelect"},
     "榜单排名": {type: "Number"},
     "商品价格": {type: "Text"},
-    "星级": {type: "Text"},
+    "星级": {type: "Number"},
     "评论数量": {type: "Text"},
     "本次新增": {type: "Text"},
     "类目名称": {type: "Text"},
