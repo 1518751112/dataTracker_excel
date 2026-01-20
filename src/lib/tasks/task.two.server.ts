@@ -56,11 +56,18 @@ const ThisProductRes = {
     "评论数量": {type: "Text"},
     "商品价格": {type: "Text"},
     "划线价格": {type: "Text"},
+    "Color": {type: "Text"},
+    "Size": {type: "Text"},
     "是否有BuyBox": {type: "SingleSelect"},
+    "Seller": {type: "Text"},
+    "Shipper": {type: "Text"},
     "跟卖数量": {type: "Number"},
+    "跟卖卖家": {type: "Text"},
     "库存情况": {type: "Text"},
     "到货时间": {type: "Text"},
     "最快到货时间": {type: "Text"},
+    "BSR Rank": {type: "Text"},
+    "AC标识": {type: "SingleSelect"},
 }
 type ThisProductResType = Record<keyof typeof ThisProductRes, any>
 
@@ -171,9 +178,14 @@ function keyListToRecord(keyword: string, asin: string, site: {zipcode:string,na
 }
 
 //本品相关信息
-function thisProductToRecord(asin:string,asinInfo: ProductDetail,site:{zipcode:string,name:string},followSeller:number,nowTime:number):ThisProductResType {
+function thisProductToRecord(asin:string,asinInfo: ProductDetail,site:{zipcode:string,name:string},nowTime:number):ThisProductResType {
     nowTime = nowTime||dayjs().valueOf();
-
+    const attributes = asinInfo?.attributes || []
+    const BSR = attributes.find(item => ["meilleures ventes","Best","Amazon 売れ筋ランキング","Clasificación","الأفضل مبيعاً","Ranking dos mais vendidos"].find(key=>item.key.includes(key)))?.value || null
+    let followSellerNum:string|number = asinInfo?.followSeller?.match(/\d/)?.[0];
+    if(followSellerNum){
+        followSellerNum = Number(followSellerNum)-1
+    }
     return {
         '采集时间': nowTime,
         "站点与邮编": `${site.name} - ${site.zipcode}`,
@@ -181,13 +193,20 @@ function thisProductToRecord(asin:string,asinInfo: ProductDetail,site:{zipcode:s
         'ASIN标题': asinInfo?.title || null,
         '商品价格': asinInfo?.price || null,
         '划线价格': asinInfo?.strikethroughPrice?.value || null,
+        "Color": asinInfo?.color,
+        "Size": asinInfo?.size,
         '是否有BuyBox': asinInfo?.has_cart?.toString(),
-        '跟卖数量': followSeller || null,
+        '跟卖数量': followSellerNum,
+        '跟卖卖家': null,
+        "Seller": asinInfo?.seller||null,
+        "Shipper": asinInfo?.shipper||null,
         '库存情况': asinInfo?.inStock || null,
         '到货时间': asinInfo?.delivery?.deliveryTime,
         '最快到货时间': asinInfo?.delivery?.fastestDelivery,
         '星级': asinInfo?.star?Number((asinInfo?.star)): null,
         '评论数量': asinInfo?.rating?Number((asinInfo?.rating)?.replace(/[^\d.]/g, '')) : null,
+        "BSR Rank": BSR,
+        "AC标识": asinInfo?.acBadge?"有":"无",
     }
 }
 
@@ -377,13 +396,7 @@ export class TaskTwoService {
                     asinInfo = await instance.getProductByAsin(asin, zipcode);
                     asinInfoMap.set(key, asinInfo)
                 }
-                let followSeller = asinFollowMap.get(asin)
-                if(followSeller==null){
-                    followSeller = await instance.getFollowSeller(asin, zipcode);
-                    followSeller = followSeller||0;
-                    asinFollowMap.set(asin, followSeller)
-                }
-                thisProduct.push(thisProductToRecord(asin, asinInfo,sites[i],followSeller,nowTime))
+                thisProduct.push(thisProductToRecord(asin, asinInfo,sites[i],nowTime))
             }
 
         }
@@ -412,14 +425,6 @@ export class TaskTwoService {
 
         for (let i = 0; i < rankingData.results.length; i++) {
             const item = rankingData.results[i]
-            /*const asin = item.asin
-            const key = `${asin}_${zipcode}`;
-            let asinInfo = asinInfoMap.get(key);
-            if (!asinInfo) {
-                logger.debug(`[TASK 畅销榜排名] 未缓存 ${asin} 邮编 ${zipcode} 数据，开始获取`)
-                asinInfo = await instance.getProductByAsin(asin, zipcode);
-                asinInfoMap.set(key, asinInfo)
-            }*/
             list.push(sellersRankToRecord(item, null,sites[0]))
         }
 
@@ -475,18 +480,6 @@ export class TaskTwoService {
 
 
             }
-
-            //本品信息
-            /*for (let i = 0; i < asins.length; i++) {
-                const asin = asins[i]
-                const key = `${asin}_${zipcode}`;
-                let asinInfo = asinInfoMap.get(key);
-                if (!asinInfo) {
-                    asinInfo = await instance.getProductByAsin(asin, zipcode);
-                    asinInfoMap.set(key, asinInfo)
-                }
-                thisProduct.push(thisProductToRecord(asin,zipcode, asinInfo))
-            }*/
 
         }))
 

@@ -34,6 +34,9 @@ export interface ProductDetail {
     aiReviewsSummary?: AiReviews;
     category_name: string;
     color: string;
+    size?: string;
+    seller?: string;
+    shipper?: string;
     product_weight: string;
     rating: string;
     description: string;
@@ -51,6 +54,7 @@ export interface ProductDetail {
     product_description: ProductDescriptionItem[];
     brand: string;
     image: string;
+    followSeller?: string;
     price?: string;
     strikethroughPrice?: { value: string, key: string };
     inStock?: string;
@@ -64,6 +68,7 @@ export interface ProductDetail {
     otherAsins: string[];
     highResolutionImages: string[];
     has_cart: boolean;
+    acBadge: boolean;
     delivery?: {
         deliveryTime:string
         fastestDelivery:string
@@ -265,8 +270,8 @@ export class Scrapeapi {
         return result
     }
 
-    //获取跟卖数量
-    public async getFollowSeller(asin: string, zipcode: string):Promise<number|null>{
+    //获取跟卖信息
+    public async getFollowSellerInfo(asin: string, zipcode: string):Promise<any|null>{
         const response = await this.post(`/api/v1/scrape/follow-seller`, {
             "url": "https://www.amazon.com",
             "timeout": 60000,
@@ -281,7 +286,7 @@ export class Scrapeapi {
         if (response.data.code != 0) {
             throw new Error(`Scrapeapi getBestsellerRank error: ${response.data}`);
         }
-        return response.data?.data?.json?.[0]?.data?.items?.length||null;
+        return response.data?.data?.json?.[0]?.data||null;
     }
 
     //根据邮编获取亚马逊站点地址
