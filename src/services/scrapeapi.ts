@@ -118,6 +118,7 @@ export interface BestsellerResponse {
     recsList: string;
     offset: string;
     nextPage: string;
+    title?: string;
     results: BestsellerProduct[];
     acpPath: string;
 }

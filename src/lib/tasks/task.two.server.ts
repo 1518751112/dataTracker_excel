@@ -113,7 +113,7 @@ function getTableFields(obj: Record<string, any>) {
     }) as FieldSpec[]
 }
 
-function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail,site?: {zipcode:string,name:string}): BestsellerListResType {
+function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail,site?: {zipcode:string,name:string},title?:string): BestsellerListResType {
     const nowTime = dayjs().valueOf();
     const star = item.star?.match(/^[\d.]+/)?.[0] || null;
     const aiReviews = found?.aiReviewsSummary || found?.aiReviews;
@@ -151,7 +151,7 @@ function sellersRankToRecord(item:BestsellerProduct,found?: ProductDetail,site?:
         "星级": star?Number(star):null,
         "评论数量": found?.rating?.replace(/[^\d.]/g, '') || item.rating,
         "本次新增": null,
-        "类目名称": found?.category_name,
+        "类目名称": found?.category_name||title,
         "首次发售日期": found?.first_date,
         "最近一个月销量": found?.sales,
         "Customers Say": customerSay,
@@ -254,8 +254,8 @@ export class TaskTwoService {
             const sites = (it.fields["站点与邮编"]?.map(v => {
                 const arr = v.split("-")
                 return {
-                    zipcode: arr[1],
-                    name: arr[0]
+                    zipcode: arr[1]?.trim(),
+                    name: arr[0]?.trim()
                 }
             }) || []) as [];
             const competitorsASINs = (it.fields["竞品ASIN"]?.split("\n") || []) as string[];
@@ -310,10 +310,10 @@ export class TaskTwoService {
             const it = startTask[i]
             const categoryUrl = it.fields["追踪类目链接"]?.trim() || ""
             const sites = (it.fields["追踪站点与邮编"]?.map(v => {
-                const arr = v.split("-")
+                const arr = v.split("-") as string[]
                 return {
-                    zipcode: arr[1],
-                    name: arr[0]
+                    zipcode: arr[1]?.trim(),
+                    name: arr[0]?.trim()
                 }
             }) || []) as [];
             if (!categoryUrl) continue
@@ -370,8 +370,8 @@ export class TaskTwoService {
             const sites = (it.fields["追踪站点与邮编"]?.map(v => {
                 const arr = v.split("-")
                 return {
-                    zipcode: arr[1],
-                    name: arr[0]
+                    zipcode: arr[1]?.trim(),
+                    name: arr[0]?.trim()
                 }
             }) || []) as [];
             if (!asins.length || !sites.length) continue
@@ -413,6 +413,7 @@ export class TaskTwoService {
 
     //处理热卖榜链接处理
     private async handleTopSellersRank(url:string,sites:{zipcode:string,name:string}[]) {
+        console.log(`[TASK 畅销榜排名] 开始处理`,sites)
         //通过url的域名确定邮编
         const urlObj = new URL(url)
         const instance = Scrapeapi.getInstance();
@@ -432,7 +433,7 @@ export class TaskTwoService {
 
         for (let i = 0; i < rankingData.results.length; i++) {
             const item = rankingData.results[i]
-            list.push(sellersRankToRecord(item, null,sites[0]))
+            list.push(sellersRankToRecord(item, null,sites[0],rankingData.title))
         }
 
         return list
