@@ -22,6 +22,21 @@ export function startTasks() {
       const result = await Promise.allSettled([
         taskService.runASINListTask(),
         taskService.runAsinDetail(),
+      ])
+      result.forEach(it => {
+        if (it.status == 'rejected') {
+          logger.error(`[TASK] ${it.reason}`)
+        }
+      })
+    }catch (e) {
+      logger.error(e);
+    }
+  }, { timezone: 'Asia/Shanghai' })
+
+  // 每周一、周五 0点10分执行
+  cron.schedule('10 0 * * 1,5', async () => {
+    try {
+      const result = await Promise.allSettled([
         taskService.runTopSellersRankTask(),
       ])
       result.forEach(it => {
@@ -33,6 +48,8 @@ export function startTasks() {
       logger.error(e);
     }
   }, { timezone: 'Asia/Shanghai' })
+
+
 
   setTimeout(async ()=>{
     try {
