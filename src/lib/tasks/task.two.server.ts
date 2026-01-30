@@ -21,7 +21,7 @@ import {TaskTool} from "@lib/tasks/task.tool";
 //追踪类目清单
 const CategoryListFieldsKey = {
     "任务编号": {type: "AutoNumber"},
-    "追踪站点与邮编": {type: "MultiSelect"},
+    "站点与邮编": {type: "MultiSelect"},
     "追踪类目链接": {type: "Text"},
     "最近处理时间": {type: "Text"},
 }
@@ -309,7 +309,7 @@ export class TaskTwoService {
         for (let i = 0; i < startTask.length; i++) {
             const it = startTask[i]
             const categoryUrl = it.fields["追踪类目链接"]?.trim() || ""
-            const sites = (it.fields["追踪站点与邮编"]?.map(v => {
+            const sites = (it.fields["站点与邮编"]?.map(v => {
                 const arr = v.split("-") as string[]
                 return {
                     zipcode: arr[1]?.trim(),
