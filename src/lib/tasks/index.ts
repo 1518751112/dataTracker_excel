@@ -34,7 +34,7 @@ export function startTasks() {
   }, { timezone: 'Asia/Shanghai' })
 
   // 每周一、周五 0点10分执行
-  cron.schedule('10 0 * * 1,5', async () => {
+  cron.schedule('0 10 0 * * 1,5', async () => {
     try {
       const result = await Promise.allSettled([
         taskService.runTopSellersRankTask(),

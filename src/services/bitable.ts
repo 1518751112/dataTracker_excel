@@ -16,6 +16,34 @@ export async function createApp(accessToken: string, name: string,folderToken?:s
   return resp.data.data.app
 }
 
+/**
+ * 复制多维表格
+ * @param accessToken 访问令牌
+ * @param appToken 源多维表格的 app_token
+ * @param name 复制后的多维表格名称（可选）
+ * @param folderToken 目标文件夹 token（可选，不传则复制到根目录）
+ * @param withoutContent 是否不复制内容，true 表示只复制结构不复制数据（可选，默认 false）
+ * @returns 复制后的多维表格信息
+ */
+export async function copyApp(
+  accessToken: string,
+  appToken: string,
+  name?: string,
+  folderToken?: string,
+  withoutContent?: boolean
+) {
+  const payload: Record<string, any> = {}
+  if (name) payload.name = name
+  if (folderToken) payload.folder_token = folderToken
+  if (withoutContent !== undefined) payload.without_content = withoutContent
+
+  const resp = await lark.post(`/bitable/v1/apps/${appToken}/copy`, payload, auth(accessToken))
+  if (resp.data.code !== 0) {
+    throw new Error(`复制多维表格失败: ${resp.data.msg || JSON.stringify(resp.data)}`)
+  }
+  return resp.data.data.app
+}
+
 export async function listTables(accessToken: string, appToken: string) {
   const resp = await lark.get(`/bitable/v1/apps/${appToken}/tables?page_size=100`, auth(accessToken))
   return resp.data.data?.items || []
@@ -103,9 +131,26 @@ export async function listRecords<T=any>(accessToken: string, appToken: string, 
   return resp.data.data?.items || []
 }
 
-export async function searchRecords(accessToken: string, appToken: string, tableId: string, body: any) {
-  const resp = await lark.post(`/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`, body, auth(accessToken))
-  return resp.data.data?.items || []
+/**
+ * 搜索记录（支持分页）
+ * @param accessToken 访问令牌
+ * @param appToken 多维表格的 app_token
+ * @param tableId 数据表的 table_id
+ * @param body 内容
+ * @param query 搜索条件（包含 filter、field_names、page_size、page_token 等）
+ * @returns 搜索结果，包含 items 和 page_token
+ */
+export async function searchRecords(accessToken: string, appToken: string, tableId: string, body: any,query?:any) {
+  const resp = await lark.post(`/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`, body, {
+    ...auth(accessToken),
+    params: query
+  })
+  return {
+    items: resp.data.data?.items || [],
+    page_token: resp.data.data?.page_token,
+    has_more: resp.data.data?.has_more || false,
+    total: resp.data.data?.total
+  }
 }
 
 export async function searchRecordsByFieldValues(accessToken: string, appToken: string, tableId: string, fieldName: string, values: any[]) {
@@ -116,7 +161,8 @@ export async function searchRecordsByFieldValues(accessToken: string, appToken: 
     filter: { conjunction: 'and', conditions: [{ field_id: fieldId, operator: 'is', value: values.slice(0, 10) }] },
     page_size: Math.min(values.length, 500)
   }
-  return await searchRecords(accessToken, appToken, tableId, searchBody)
+  const result = await searchRecords(accessToken, appToken, tableId, searchBody)
+  return result.items
 }
 
 export async function updateRecord(accessToken: string, appToken: string, tableId: string, recordId: string, fields: Record<string, any>) {
@@ -134,7 +180,7 @@ export async function upsertRecordByUniqueKey(accessToken: string, appToken: str
     page_size: 1
   }
   const found = await searchRecords(accessToken, appToken, tableId, searchBody)
-  if (found.length > 0) {
+  if (found.items.length > 0) {
     const recordId = found[0].record_id
     return await updateRecord(accessToken, appToken, tableId, recordId, data)
   } else {
@@ -223,5 +269,158 @@ function normalizeFieldSpec(spec: FieldSpec) {
   }
 
   return { field_name: name, type: typeVal, property }
+}
+
+/**
+ * 批量删除记录
+ * @param accessToken 访问令牌
+ * @param appToken 多维表格的 app_token
+ * @param tableId 数据表的 table_id
+ * @param recordIds 要删除的记录 ID 数组（单次最多 500 条）
+ * @returns 删除结果
+ */
+export async function batchDeleteRecords(
+  accessToken: string,
+  appToken: string,
+  tableId: string,
+  recordIds: string[]
+) {
+  if (!recordIds || recordIds.length === 0) {
+    return { deleted: 0 }
+  }
+  const resp = await lark.post(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records/batch_delete`,
+    { records: recordIds },
+    auth(accessToken)
+  )
+  if (resp.data.code !== 0) {
+    throw new Error(`批量删除记录失败: ${resp.data.msg || JSON.stringify(resp.data)}`)
+  }
+  return { deleted: recordIds.length, data: resp.data.data }
+}
+
+/**
+ * 获取数据表中所有记录的 ID（使用 searchRecords 接口，支持分页）
+ * @param accessToken 访问令牌
+ * @param appToken 多维表格的 app_token
+ * @param tableId 数据表的 table_id
+ * @returns 所有记录的 ID 数组
+ */
+async function getAllRecordIds(
+  accessToken: string,
+  appToken: string,
+  tableId: string
+): Promise<string[]> {
+  // 获取第一个字段名，用于减少返回数据量
+  const fields = await listFields(accessToken, appToken, tableId)
+  const firstFieldName = fields[0]?.field_name
+  if (!firstFieldName) {
+    return []
+  }
+
+  const recordIds: string[] = []
+  let pageToken: string | undefined
+
+  do {
+    const query: any = {
+      page_size: 500
+    }
+    const body: any = {
+      field_names: [firstFieldName],
+    }
+    if (pageToken) {
+      query.page_token = pageToken
+    }
+    const result = await searchRecords(accessToken, appToken, tableId, body,query)
+    for (const item of result.items) {
+      if (item.record_id) {
+        recordIds.push(item.record_id)
+      }
+    }
+    pageToken = result.page_token
+  } while (pageToken)
+
+  return recordIds
+}
+
+/**
+ * 清空指定数据表的所有记录
+ * @param accessToken 访问令牌
+ * @param appToken 多维表格的 app_token
+ * @param tableId 数据表的 table_id
+ * @returns 删除统计信息
+ */
+export async function clearTableRecords(
+  accessToken: string,
+  appToken: string,
+  tableId: string
+) {
+  const recordIds = await getAllRecordIds(accessToken, appToken, tableId)
+  if (recordIds.length === 0) {
+    return { tableId, deleted: 0 }
+  }
+
+  // 将记录ID分成每组500条
+  const chunks: string[][] = []
+  for (let i = 0; i < recordIds.length; i += 500) {
+    chunks.push(recordIds.slice(i, i + 500))
+  }
+
+  let totalDeleted = 0
+  const concurrency = 20 // 并发数
+  // 并发删除，每次最多同时请求20个批次
+  for (let i = 0; i < chunks.length; i += concurrency) {
+    const batch = chunks.slice(i, i + concurrency)
+    const results = await Promise.all(
+      batch.map(chunk => batchDeleteRecords(accessToken, appToken, tableId, chunk))
+    )
+    for (const result of results) {
+      totalDeleted += result.deleted
+    }
+  }
+
+  return { tableId, deleted: totalDeleted }
+}
+
+/**
+ * 清空多维表格中所有数据表的记录
+ * @param accessToken 访问令牌
+ * @param appToken 多维表格的 app_token
+ * @returns 各数据表的删除统计信息
+ */
+export async function clearAllTablesRecords(
+  accessToken: string,
+  appToken: string
+) {
+  // 获取所有数据表
+  const tables = await listTables(accessToken, appToken)
+  if (!tables || tables.length === 0) {
+    return { tables: [], totalDeleted: 0 }
+  }
+
+  const results: { tableId: string; tableName: string; deleted: number }[] = []
+  let totalDeleted = 0
+
+  const concurrency = 2 // 同时处理2个表
+  // 并发清空数据表，每次最多同时处理2个表
+  for (let i = 0; i < tables.length; i += concurrency) {
+    const batch = tables.slice(i, i + concurrency)
+    const batchResults = await Promise.all(
+      batch.map(async (table: any) => {
+        const result = await clearTableRecords(accessToken, appToken, table.table_id)
+        return {
+          tableId: table.table_id,
+          tableName: table.name,
+          deleted: result.deleted
+        }
+      })
+    )
+    for (const r of batchResults) {
+      results.push(r)
+      totalDeleted += r.deleted
+    }
+  }
+
+  return { tables: results, totalDeleted }
 }
 
